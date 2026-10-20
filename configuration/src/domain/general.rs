@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::domain::ConfigDomain;
+use crate::{domain::ConfigDomain, validate::ConfigValidate};
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
@@ -37,10 +37,18 @@ impl Default for GeneralConfig {
     }
 }
 
-pub const FALLBACK_GENERAL_JSON: &str = include_str!("../../fallback/general.json");
-
 impl ConfigDomain for GeneralConfig {
     const SCHEMA_NAME: &'static str = "general";
+}
 
-    const EMBEDDED_FALLBACK: &'static str = FALLBACK_GENERAL_JSON;
+impl ConfigValidate for GeneralConfig {
+    fn validate(&self) -> Result<(), Vec<crate::validate::ValidationError>> {
+        let errors = Vec::new();
+
+        if errors.is_empty() {
+            return Ok(());
+        } else {
+            return Err(errors);
+        }
+    }
 }

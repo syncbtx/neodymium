@@ -2,9 +2,12 @@ use schemars::{JsonSchema, json_schema};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::{borrow::Cow, fmt::Display, num::NonZeroU32, str::FromStr};
 
-use crate::domain::ConfigDomain;
+use crate::{
+    domain::ConfigDomain,
+    validate::{ConfigValidate, ValidationError},
+};
 
-#[derive(Debug, Copy, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum Edge {
     #[default]
@@ -218,6 +221,45 @@ impl Default for BarConfig {
     }
 }
 
+impl BarConfig {
+    pub fn validate_for_edge(&self, edge: Edge, errors: &mut Vec<ValidationError>) {
+        if self.opacity > 100 {
+            errors.push(ValidationError::OpacityOutOfRange {
+                edge,
+                section_idx: None,
+                actual: self.opacity,
+            });
+        }
+
+        let thickness = self.minor_axis_size.get();
+        let total_padding = self.minor_axis_padding * 2;
+        if total_padding >= thickness {
+            errors.push(ValidationError::PaddingExceedsThickness {
+                edge,
+                total_padding,
+                thickness,
+            });
+        }
+
+        for (section_idx, section) in self.sections.iter().enumerate() {
+            if section.opacity > 100 {
+                errors.push(ValidationError::OpacityOutOfRange {
+                    edge,
+                    section_idx: Some(section_idx),
+                    actual: section.opacity,
+                });
+            }
+
+            if section.modules.is_empty() {
+                errors.push(ValidationError::SectionEmptyModules {
+                    edge,
+                    section_idx,
+                });
+            }
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
 pub struct BarsConfig {
@@ -244,10 +286,23 @@ impl Default for BarsConfig {
     }
 }
 
-pub const FALLBACK_BARS_JSON: &str = include_str!("../../fallback/bars.json");
-
 impl ConfigDomain for BarsConfig {
     const SCHEMA_NAME: &'static str = "bars";
+}
 
-    const EMBEDDED_FALLBACK: &'static str = FALLBACK_BARS_JSON;
+impl ConfigValidate for BarsConfig {
+    fn validate(&self) -> Result<(), Vec<ValidationError>> {
+        let mut errors = Vec::new();
+
+        self.top.validate_for_edge(Edge::Top, &mut errors);
+        self.right.validate_for_edge(Edge::Right, &mut errors);
+        self.bottom.validate_for_edge(Edge::Bottom, &mut errors);
+        self.left.validate_for_edge(Edge::Left, &mut errors);
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
 }

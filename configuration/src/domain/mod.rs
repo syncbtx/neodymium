@@ -1,13 +1,14 @@
 pub mod bars;
+pub mod core;
 pub mod general;
 
 use schemars::{JsonSchema, schema_for};
+use serde::{Serialize, de::DeserializeOwned};
 
-use crate::NEODYMIUM_CONFIG_DIR;
+use crate::resolution::NEODYMIUM_CONFIG_DIR;
 
-pub trait ConfigDomain: JsonSchema {
+pub trait ConfigDomain: JsonSchema + Serialize + DeserializeOwned + Default {
     const SCHEMA_NAME: &'static str;
-    const EMBEDDED_FALLBACK: &'static str;
 
     fn schema_json() -> String {
         let mut schema = serde_json::to_value(schema_for!(Self)).expect("schema generation failed");
