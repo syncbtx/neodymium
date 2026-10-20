@@ -11,7 +11,7 @@ fn main() {
                         println!("\x1b[32mconfig validation is successful\x1b[32m")
                     } else {
                         for e in errors {
-                            println!("{:?}", e)
+                            println!("\x1b[30m{}\x1b[0m", e)
                         }
                     }
                 }

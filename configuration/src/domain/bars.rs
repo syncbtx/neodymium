@@ -1,3 +1,4 @@
+use hex_color::HexColor;
 use schemars::{JsonSchema, json_schema};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::{borrow::Cow, fmt::Display, num::NonZeroU32, str::FromStr};
@@ -15,6 +16,15 @@ pub enum Edge {
     Right,
     Bottom,
     Left,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum BarLayer {
+    #[default]
+    Top,
+    Bottom,
+    Overlay,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
@@ -107,7 +117,7 @@ pub enum BarBackdrop {
         radius: u32,
     },
     Waveform {
-        color: String,
+        color: HexColor,
         opacity: u32,
     },
     // Gradient,
@@ -118,7 +128,7 @@ pub enum BarBackdrop {
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
 pub struct Border {
     pub width: u32,
-    pub color: String,
+    pub color: HexColor,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
@@ -150,9 +160,12 @@ pub struct BarBlend {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
 pub struct SectionConfig {
-    pub background: Option<String>,
-    pub foreground: Option<String>, // hex | "contrast"
-    pub opacity: u32,               // must be explicitly overrided, defaults to 100
+    pub background: Option<HexColor>,
+    pub foreground: Option<HexColor>, // hex | "contrast"
+    pub opacity: u32,                 // must be explicitly overrided, defaults to 100
+    pub spacing: u32,
+    pub major_axis_padding: u32,
+    pub minor_axis_padding: u32,
     pub border: Border,             // defaults to none
     pub border_radius: Option<u32>, // only freaks touch this
     pub modules: Vec<ModuleConfig>,
@@ -164,6 +177,9 @@ impl Default for SectionConfig {
             background: None,
             foreground: None,
             opacity: 100,
+            spacing: 8,
+            major_axis_padding: 12,
+            minor_axis_padding: 12,
             border: Border::default(),
             border_radius: None,
             modules: Vec::new(),
@@ -176,14 +192,15 @@ impl Default for SectionConfig {
 pub struct BarConfig {
     pub enabled: bool,
     pub edge: Edge,
+    pub layer: BarLayer,
     pub islands: bool,
     pub autohide: bool,
     pub border: Border,
     pub border_radius: u32,
     pub section_border_radius: u32, // global fallback for sections
     pub backdrop: BarBackdrop,
-    pub background: String, // applied when backdrop is None and also serves as fallback for sections
-    pub foreground: String,
+    pub background: HexColor, // applied when backdrop is None and also serves as fallback for sections
+    pub foreground: HexColor,
     pub opacity: u32, // applied strictly to the background
     pub attachment_mode: AttachmentMode,
     pub major_axis_size: MajorAxisSize, // length
@@ -200,14 +217,15 @@ impl Default for BarConfig {
         Self {
             enabled: false,
             edge: Edge::default(),
+            layer: BarLayer::Top,
             islands: false,
             autohide: false,
             border: Border::default(),
             border_radius: 12,
             section_border_radius: 12,
             backdrop: BarBackdrop::None,
-            background: "#000000".to_string(),
-            foreground: "#ffffff".to_string(),
+            background: HexColor::BLACK,
+            foreground: HexColor::WHITE,
             opacity: 100,
             attachment_mode: AttachmentMode::Floating,
             major_axis_size: MajorAxisSize::Percent(75),
@@ -251,10 +269,7 @@ impl BarConfig {
             }
 
             if section.modules.is_empty() {
-                errors.push(ValidationError::SectionEmptyModules {
-                    edge,
-                    section_idx,
-                });
+                errors.push(ValidationError::SectionEmptyModules { edge, section_idx });
             }
         }
     }

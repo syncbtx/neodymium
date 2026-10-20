@@ -20,6 +20,7 @@ pub enum ValidationError {
         total_padding: u32,
         thickness: u32,
     },
+    InvalidColor,
 }
 
 impl std::fmt::Display for ValidationError {
@@ -51,6 +52,9 @@ impl std::fmt::Display for ValidationError {
                     f,
                     "{edge:?}.padding ({total_padding}px) exceeds thickness ({thickness}px)"
                 )
+            }
+            Self::InvalidColor => {
+                write!(f, "Invalid Color")
             }
         }
     }
