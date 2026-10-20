@@ -1,6 +1,6 @@
-use configuration::ConfigSchema;
+use configuration::domain::ConfigDomain;
 
 fn main() {
-    let _ = configuration::bars::BarsConfig::save_schema();
-    let _ = configuration::general::GeneralConfig::save_schema();
+    let _ = configuration::domain::bars::BarsConfig::save_schema();
+    let _ = configuration::domain::general::GeneralConfig::save_schema();
 }
