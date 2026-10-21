@@ -1,22 +1,50 @@
-use configuration::{engine::ConfigEngine, validate::ConfigValidate};
+use configuration::engine::ConfigEngine;
+
+use model::bar::{self, Bar};
+
+#[derive(Debug, Default)]
+pub struct Bars {
+    pub top: Bar,
+    pub right: Bar,
+    pub bottom: Bar,
+    pub left: Bar,
+}
+
+#[derive(Debug)]
+pub struct Shell {
+    pub config_engine: ConfigEngine,
+    pub bars: Bars,
+}
+
+impl Default for Shell {
+    fn default() -> Self {
+        Self {
+            config_engine: Default::default(),
+            bars: Default::default(),
+        }
+    }
+}
+
+impl Shell {
+    pub fn init(&mut self) -> Result<(), String> {
+        match ConfigEngine::init() {
+            Ok(engine) => {
+                let bars = Bars {
+                    top: Bar::from_config(&engine.core_config.bars.top),
+                    right: Bar::from_config(&engine.core_config.bars.right),
+                    bottom: Bar::from_config(&engine.core_config.bars.bottom),
+                    left: Bar::from_config(&engine.core_config.bars.left),
+                };
+                self.bars = bars;
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
+    }
+}
 
 fn main() {
-    match ConfigEngine::init() {
-        Ok(engine) => {
-            println!("Config Initialized {:#?}", engine.core_config);
-            match engine.core_config.validate() {
-                Ok(_) => {}
-                Err(errors) => {
-                    if errors.is_empty() {
-                        println!("\x1b[32mconfig validation is successful\x1b[32m")
-                    } else {
-                        for e in errors {
-                            println!("\x1b[30m{}\x1b[0m", e)
-                        }
-                    }
-                }
-            }
-        }
-        Err(e) => eprintln!("Error {e}"),
-    }
+    let mut shell = Shell::default();
+    shell.init();
+    println!("{:#?}", shell);
 }

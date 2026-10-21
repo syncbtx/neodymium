@@ -7,8 +7,17 @@ use crate::{
     resolution::{self, fallback_dir, preferences_dir, preferences_file, schema_dir, schema_file},
 };
 
+#[derive(Debug)]
 pub struct ConfigEngine {
     pub core_config: CoreConfig,
+}
+
+impl Default for ConfigEngine {
+    fn default() -> Self {
+        Self {
+            core_config: Default::default(),
+        }
+    }
 }
 
 impl ConfigEngine {
