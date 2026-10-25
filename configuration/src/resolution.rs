@@ -138,6 +138,5 @@ pub fn resolve_domain<D: ConfigDomain>() -> Result<D, String> {
         }
     }
 
-    let config: D = serde_json::from_value(base).map_err(|e| e.to_string())?;
-    Ok(config)
+    Ok(serde_json::from_value(base).unwrap_or_default())
 }

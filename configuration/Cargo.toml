@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+colored = "3.1.1"
 hex_color = {path = "../../../Projects/hex_color", features = ["serde", "schemars"]}
 schemars = "1.2.3"
 serde = {version = "1.0.229", features = ["derive"]}

@@ -1,0 +1,7 @@
+- edge dedicated bars [TOP | RIGHT | BOTTOM | LEFT]
+- ui scaling: not new at all
+- color collection: shader system to apply color effects like fullscreen grayscale
+- camera recording screen inspired window borders, and config template[]
+- wallpaper parallax
+- 
+-

@@ -1,4 +1,4 @@
-use crate::domain::bars::Edge;
+use crate::shared::Edge;
 
 pub trait ConfigValidate {
     fn validate(&self) -> Result<(), Vec<ValidationError>>;
@@ -6,11 +6,6 @@ pub trait ConfigValidate {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ValidationError {
-    OpacityOutOfRange {
-        edge: Edge,
-        section_idx: Option<usize>,
-        actual: u32,
-    },
     SectionEmptyModules {
         edge: Edge,
         section_idx: usize,
@@ -26,17 +21,6 @@ pub enum ValidationError {
 impl std::fmt::Display for ValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::OpacityOutOfRange {
-                edge,
-                section_idx,
-                actual,
-            } => match section_idx {
-                Some(idx) => write!(
-                    f,
-                    "{edge:?}.sections[{idx}].opacity must be 0..=100, got {actual}"
-                ),
-                None => write!(f, "{edge:?}.opacity must be 0..=100, got {actual}"),
-            },
             Self::SectionEmptyModules { edge, section_idx } => {
                 write!(
                     f,

@@ -107,12 +107,6 @@ impl ConfigDomain for GeneralConfig {
 
 impl ConfigValidate for GeneralConfig {
     fn validate(&self) -> Result<(), Vec<crate::validate::ValidationError>> {
-        let errors = Vec::new();
-
-        if errors.is_empty() {
-            return Ok(());
-        } else {
-            return Err(errors);
-        }
+        Ok(())
     }
 }

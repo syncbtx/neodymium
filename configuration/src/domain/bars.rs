@@ -5,18 +5,9 @@ use std::{borrow::Cow, fmt::Display, num::NonZeroU32, str::FromStr};
 
 use crate::{
     domain::ConfigDomain,
+    shared::{Alpha, Border, Edge},
     validate::{ConfigValidate, ValidationError},
 };
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub enum Edge {
-    #[default]
-    Top,
-    Right,
-    Bottom,
-    Left,
-}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -35,7 +26,7 @@ pub enum AttachmentMode {
     Attached,
 }
 
-#[derive(Debug, Clone, PartialEq, Copy, Default)]
+#[derive(Debug, Copy, Clone, PartialEq, Default)]
 pub enum MajorAxisSize {
     #[default]
     Auto,
@@ -108,7 +99,7 @@ impl JsonSchema for MajorAxisSize {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Copy, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum BarBackdrop {
     #[default]
@@ -122,13 +113,6 @@ pub enum BarBackdrop {
     },
     // Gradient,
     // Glow
-}
-
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
-#[serde(default, deny_unknown_fields, rename_all = "camelCase")]
-pub struct Border {
-    pub width: u32,
-    pub color: HexColor,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
@@ -201,7 +185,8 @@ pub struct BarConfig {
     pub backdrop: BarBackdrop,
     pub background: HexColor, // applied when backdrop is None and also serves as fallback for sections
     pub foreground: HexColor,
-    pub opacity: u32, // applied strictly to the background
+    pub contrast: bool,
+    pub opacity: Alpha, // applied strictly to the background
     pub attachment_mode: AttachmentMode,
     pub major_axis_size: MajorAxisSize, // length
     pub minor_axis_size: NonZeroU32,    // thickness
@@ -226,7 +211,8 @@ impl Default for BarConfig {
             backdrop: BarBackdrop::None,
             background: HexColor::BLACK,
             foreground: HexColor::WHITE,
-            opacity: 100,
+            contrast: false,
+            opacity: Alpha::default(),
             attachment_mode: AttachmentMode::Floating,
             major_axis_size: MajorAxisSize::Percent(75),
             minor_axis_size: NonZeroU32::new(32).unwrap(),
@@ -234,21 +220,30 @@ impl Default for BarConfig {
             minor_axis_margin: 12,
             major_axis_padding: 8,
             minor_axis_padding: 8,
-            sections: Vec::new(),
+            sections: vec![SectionConfig {
+                background: Some(hex_color::HexColor::GREEN),
+                foreground: Some(hex_color::HexColor::RED),
+                opacity: 255,
+                spacing: 24,
+                major_axis_padding: 12,
+                minor_axis_padding: 12,
+                border: Border {
+                    width: 0,
+                    color: HexColor::WHITE,
+                },
+                border_radius: None,
+                modules: vec![
+                    ModuleConfig::Spacer(64),
+                    ModuleConfig::Spacer(32),
+                    ModuleConfig::Spacer(12),
+                ],
+            }],
         }
     }
 }
 
 impl BarConfig {
     pub fn validate_for_edge(&self, edge: Edge, errors: &mut Vec<ValidationError>) {
-        if self.opacity > 100 {
-            errors.push(ValidationError::OpacityOutOfRange {
-                edge,
-                section_idx: None,
-                actual: self.opacity,
-            });
-        }
-
         let thickness = self.minor_axis_size.get();
         let total_padding = self.minor_axis_padding * 2;
         if total_padding >= thickness {
@@ -260,14 +255,6 @@ impl BarConfig {
         }
 
         for (section_idx, section) in self.sections.iter().enumerate() {
-            if section.opacity > 100 {
-                errors.push(ValidationError::OpacityOutOfRange {
-                    edge,
-                    section_idx: Some(section_idx),
-                    actual: section.opacity,
-                });
-            }
-
             if section.modules.is_empty() {
                 errors.push(ValidationError::SectionEmptyModules { edge, section_idx });
             }
@@ -290,11 +277,18 @@ impl Default for BarsConfig {
     fn default() -> Self {
         let mut top = BarConfig::default();
         top.enabled = true;
+
+        let mut right = BarConfig::default();
+        right.edge = Edge::Right;
+        let mut bottom = BarConfig::default();
+        bottom.edge = Edge::Bottom;
+        let mut left = BarConfig::default();
+        left.edge = Edge::Left;
         Self {
             top,
-            right: BarConfig::default(),
-            bottom: BarConfig::default(),
-            left: BarConfig::default(),
+            right,
+            bottom,
+            left,
             screen_corner_claimer: ScreenCornerClaimer::default(),
             blend: BarBlend::default(),
         }

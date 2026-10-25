@@ -1,0 +1,1 @@
+- wrong config values cause a process exit instaed of being ignored

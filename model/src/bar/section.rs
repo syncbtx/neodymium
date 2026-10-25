@@ -1,8 +1,9 @@
-use configuration::domain::bars::SectionConfig;
+use configuration::{domain::bars::SectionConfig, shared::Border};
 use hex_color::HexColor;
 
 use crate::bar::module::BarModule;
 
+#[derive(Debug)]
 pub struct BarSection {
     pub background: Option<HexColor>,
     pub foreground: Option<HexColor>,
@@ -18,7 +19,7 @@ pub struct BarSection {
 impl BarSection {
     pub fn from_config(config: &SectionConfig) -> Self {
         let mut modules = Vec::new();
-        for cfg in config.modules {
+        for cfg in config.modules.iter() {
             modules.push(BarModule::from_config(&cfg));
         }
         Self {
