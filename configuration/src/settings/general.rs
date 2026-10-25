@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{domain::ConfigDomain, validate::ConfigValidate};
+use crate::{settings::ConfigDomain, validate::ConfigValidate};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]

@@ -6,7 +6,7 @@ use amane::{
     Workspaces, Zone,
 };
 use configuration::{
-    domain::bars::{AttachmentMode, BarLayer, MajorAxisSize, ScreenCornerClaimer},
+    settings::bars::{AttachmentMode, BarLayer, MajorAxisSize, ScreenCornerClaimer},
     shared::Edge,
 };
 use model::bar::{Bar, Bars, module::BarModule, section::BarSection};

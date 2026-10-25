@@ -368,6 +368,7 @@ version = "0.1.0"
 dependencies = [
  "colored",
  "hex_color",
+ "model",
  "schemars",
  "serde",
  "serde_json",

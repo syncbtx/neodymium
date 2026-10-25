@@ -3,8 +3,8 @@ use std::fs;
 use schemars::schema_for;
 
 use crate::{
-    domain::{ConfigDomain, bars::BarsConfig, core::CoreConfig, general::GeneralConfig},
     resolution::{self, fallback_dir, preferences_dir, preferences_file, schema_dir, schema_file},
+    settings::{ConfigDomain, bars::BarsConfig, core::CoreConfig, general::GeneralConfig},
 };
 
 #[derive(Debug)]

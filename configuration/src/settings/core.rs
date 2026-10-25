@@ -1,5 +1,5 @@
 use crate::{
-    domain::{bars::BarsConfig, general::GeneralConfig},
+    settings::{bars::BarsConfig, general::GeneralConfig},
     resolution::resolve_domain,
     validate::ConfigValidate,
 };

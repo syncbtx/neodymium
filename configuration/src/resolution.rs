@@ -2,7 +2,7 @@ use std::{env, path::PathBuf, sync::LazyLock};
 
 use serde_json::{Map, Value};
 
-use crate::domain::ConfigDomain;
+use crate::settings::ConfigDomain;
 
 const HOME_UNSET_ERR_MESSAGE: &str = "CRITICAL: unable to resolve home directory, $HOME is unset";
 
