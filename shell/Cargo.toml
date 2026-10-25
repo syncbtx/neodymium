@@ -8,5 +8,8 @@ colored = "3.1.1"
 configuration = {path = "../configuration"}
 model = {path = "../model"}
 ui = {path = "../ui"}
+<<<<<<< Updated upstream
 amane = {git = "https://github.com/MystiaFin/amane.git", tag = "0.1.1"}
 inotify = {version = "0.11.5"}
+=======
+>>>>>>> Stashed changes

@@ -1685,6 +1685,7 @@ dependencies = [
  "inotify",
  "model",
  "ui",
+<<<<<<< Updated upstream
 ]
 
 [[package]]
@@ -1831,6 +1832,8 @@ checksum = "695b5790b3131dafa99b3bbfd25a216edb3d216dad9ca208d4657bfb8f2abc3d"
 dependencies = [
  "kurbo",
  "siphasher",
+=======
+>>>>>>> Stashed changes
 ]
 
 [[package]]

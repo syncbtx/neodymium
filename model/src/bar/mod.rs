@@ -35,9 +35,38 @@ pub struct Bar {
     pub sections: Vec<BarSection>,
 }
 
+<<<<<<< Updated upstream
 impl Bar {
     pub fn is_horizontal(edge: Edge) -> bool {
         matches!(edge, Edge::Top | Edge::Bottom)
+=======
+impl Default for Bar {
+    fn default() -> Self {
+        Self {
+            enabled: Default::default(),
+            exclusive_zone: Default::default(),
+            edge: Default::default(),
+            layer: Default::default(),
+            islands: Default::default(),
+            autohide: Default::default(),
+            border: Default::default(),
+            border_radius: Default::default(),
+            section_border_radius: Default::default(),
+            backdrop: Default::default(),
+            background: Default::default(),
+            foreground: Default::default(),
+            opacity: Default::default(),
+            attachment_mode: Default::default(),
+            major_axis_size: Default::default(),
+            minor_axis_size: NonZeroU32::new(24).unwrap(),
+            major_axis_margin: Default::default(),
+            minor_axis_margin: Default::default(),
+            major_axis_padding: Default::default(),
+            minor_axis_padding: Default::default(),
+            font: Default::default(),
+            sections: Default::default(),
+        }
+>>>>>>> Stashed changes
     }
 }
 

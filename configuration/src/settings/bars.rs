@@ -1,4 +1,5 @@
 use hex_color::HexColor;
+use model::bar::module::{BarModule, workspaces::Workspaces};
 use schemars::{JsonSchema, json_schema};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::{borrow::Cow, fmt::Display, num::NonZeroU32, str::FromStr};
@@ -34,6 +35,74 @@ pub enum MajorAxisSize {
     Pixels(u32),
 }
 
+<<<<<<< Updated upstream:configuration/src/settings/bars.rs
+=======
+impl Display for MajorAxisSize {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MajorAxisSize::Auto => write!(f, "auto"),
+            MajorAxisSize::Percent(pct) => write!(f, "{pct}%"),
+            MajorAxisSize::Pixels(px) => write!(f, "{px}px"),
+        }
+    }
+}
+
+impl FromStr for MajorAxisSize {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s == "auto" {
+            return Ok(Self::Auto);
+        };
+
+        if let Some(pct) = s.strip_suffix("%") {
+            return pct
+                .parse::<u32>()
+                .map(Self::Percent)
+                .map_err(|_| format!("invalid percentage: {s:?}"));
+        };
+
+        if let Some(px) = s.strip_suffix("px") {
+            return px
+                .parse::<u32>()
+                .map(Self::Pixels)
+                .map_err(|_| format!("invalid pixels: {s:?}"));
+        };
+
+        Err(format!(
+            "expected \"auto\" | percentage like \"75%\" | pixels like \"1024px\" but found {s:?}"
+        ))
+    }
+}
+
+impl Serialize for MajorAxisSize {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.collect_str(self)
+    }
+}
+
+impl<'de> Deserialize<'de> for MajorAxisSize {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = Cow::<str>::deserialize(d)?;
+        s.parse().map_err(de::Error::custom)
+    }
+}
+
+impl JsonSchema for MajorAxisSize {
+    fn schema_name() -> Cow<'static, str> {
+        "majorAxisSize".into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        json_schema!({
+            "type": "string",
+            "pattern": "^(auto|[0-9]+(\\.[0-9]+)?%|[0-9]+px)$",
+            "description": "Length of the bar along its edge: \"auto\" | \"50%\" | \"1920px\"."
+        })
+    }
+}
+
+>>>>>>> Stashed changes:configuration/src/domain/bars.rs
 #[derive(Debug, Copy, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum BarBackdrop {
@@ -50,6 +119,16 @@ pub enum BarBackdrop {
     // Glow
 }
 
+<<<<<<< Updated upstream:configuration/src/settings/bars.rs
+=======
+#[derive(Debug, Copy, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields, rename_all = "camelCase")]
+pub struct Border {
+    pub width: u32,
+    pub color: HexColor,
+}
+
+>>>>>>> Stashed changes:configuration/src/domain/bars.rs
 #[derive(Debug, Copy, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum ScreenCornerClaimer {
@@ -67,6 +146,16 @@ pub enum ModuleConfig {
         collapse_unused: bool,
     },
     Spacer(u32),
+}
+
+impl ModuleConfig {
+    pub fn to_model(&self) -> model::bar::module::BarModule {
+        match self {
+            ModuleConfig::Workspaces { .. } => BarModule::Workspaces(Workspaces),
+            ModuleConfig::Spacer(gap) => BarModule::Spacer(*gap),
+            ModuleConfig::WindowTitle => BarModule::Spacer(24),
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
@@ -88,6 +177,26 @@ pub struct SectionConfig {
     pub border: Border,             // defaults to none
     pub border_radius: Option<u32>, // only freaks touch this
     pub modules: Vec<ModuleConfig>,
+}
+
+impl SectionConfig {
+    pub fn to_model(&self) -> model::bar::section::BarSection {
+        let mut modules = Vec::new();
+        for cfg in self.modules.iter() {
+            modules.push(ModuleConfig::to_model(&cfg));
+        }
+        model::bar::section::BarSection {
+            background: self.background,
+            foreground: self.foreground,
+            opacity: self.opacity,
+            spacing: self.spacing,
+            major_axis_padding: self.major_axis_padding,
+            minor_axis_padding: self.minor_axis_padding,
+            border: self.border,
+            border_radius: self.border_radius,
+            modules,
+        }
+    }
 }
 
 impl Default for SectionConfig {
@@ -178,6 +287,37 @@ impl Default for BarConfig {
 }
 
 impl BarConfig {
+    pub fn to_model(&self) -> model::bar::Bar {
+        let mut sections = Vec::new();
+        for cfg in self.sections.iter() {
+            sections.push(SectionConfig::to_model(&cfg));
+        }
+        model::bar::Bar {
+            enabled: self.enabled,
+            exclusive_zone: true,
+            edge: self.edge,
+            layer: self.layer,
+            islands: self.islands,
+            autohide: self.autohide,
+            border: self.border,
+            border_radius: self.border_radius,
+            section_border_radius: self.section_border_radius,
+            backdrop: self.backdrop,
+            background: self.background,
+            foreground: self.foreground,
+            opacity: self.opacity,
+            attachment_mode: self.attachment_mode,
+            major_axis_size: self.major_axis_size,
+            minor_axis_size: self.minor_axis_size,
+            major_axis_margin: self.major_axis_margin,
+            minor_axis_margin: self.minor_axis_margin,
+            major_axis_padding: self.major_axis_padding,
+            minor_axis_padding: self.minor_axis_padding,
+            font: None,
+            sections,
+        }
+    }
+
     pub fn validate_for_edge(&self, edge: Edge, errors: &mut Vec<ValidationError>) {
         let thickness = self.minor_axis_size.get();
         let total_padding = self.minor_axis_padding * 2;

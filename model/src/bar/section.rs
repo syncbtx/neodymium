@@ -12,5 +12,9 @@ pub struct BarSection {
     pub padding: Option<Insets<u32>>,
     pub border: Border,
     pub border_radius: Option<u32>,
+<<<<<<< Updated upstream
     pub modules: Vec<Module>,
+=======
+    pub modules: Vec<BarModule>,
+>>>>>>> Stashed changes
 }
