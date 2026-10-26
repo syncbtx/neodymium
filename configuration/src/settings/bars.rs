@@ -7,7 +7,7 @@ use model::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{resolve::Resolve, settings::ConfigDomain, validate::Sanitize};
+use crate::{resolve::Resolve, validate::Sanitize};
 
 #[derive(Debug, Serialize, Clone, Default, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
@@ -38,6 +38,28 @@ impl Resolve for SectionSettings {
             border_radius: self.border_radius,
             modules: self.modules.clone(),
         }
+    }
+}
+
+impl SectionSettings {
+    pub fn sanitize(&mut self, bar_cross_axis: u32) {
+        if self.opacity == 0 {
+            self.opacity = 255;
+        } else {
+            self.opacity = self.opacity.min(255);
+        }
+
+        let max_radius = bar_cross_axis / 2;
+        if let Some(r) = self.border_radius {
+            self.border_radius = Some(r.min(max_radius));
+        }
+
+        self.spacing = self.spacing.min(64);
+
+        self.padding.top = self.padding.top.min(bar_cross_axis / 4);
+        self.padding.bottom = self.padding.bottom.min(bar_cross_axis / 4);
+        self.padding.left = self.padding.left.min(bar_cross_axis / 4);
+        self.padding.right = self.padding.right.min(bar_cross_axis / 4);
     }
 }
 
@@ -99,7 +121,45 @@ impl Resolve for BarSettings {
 }
 
 impl Sanitize for BarSettings {
-    fn sanitize(&mut self) {}
+    fn sanitize(&mut self) {
+        if self.cross_axis_size < 16 {
+            self.cross_axis_size = 24;
+        }
+
+        match &mut self.main_axis_size {
+            MainAxisSize::Percent(pct) => *pct = (*pct).clamp(1, 100),
+            MainAxisSize::Pixels(px) => *px = (*px).max(16),
+            MainAxisSize::Auto => {}
+        }
+
+        let half_thickness = self.cross_axis_size / 2;
+        match self.edge {
+            Edge::Top | Edge::Bottom => {
+                if self.padding.top + self.padding.bottom >= half_thickness {
+                    self.padding.top = 4;
+                    self.padding.bottom = 4;
+                }
+            }
+            Edge::Left | Edge::Right => {
+                if self.padding.left + self.padding.right >= half_thickness {
+                    self.padding.left = 4;
+                    self.padding.right = 4;
+                }
+            }
+        }
+
+        self.border_radius = self.border_radius.min(self.cross_axis_size / 2);
+        self.section_border_radius = self.section_border_radius.min(self.cross_axis_size / 2);
+
+        self.sections.retain(|sec| !sec.modules.is_empty());
+        for sec in &mut self.sections {
+            sec.sanitize(self.cross_axis_size);
+        }
+
+        if self.sections.is_empty() {
+            self.enabled = false;
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]

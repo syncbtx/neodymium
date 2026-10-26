@@ -52,6 +52,10 @@ impl Resolve for GeneralSettings {
 
 impl Sanitize for GeneralSettings {
     fn sanitize(&mut self) {
-        self.scale = self.scale.clamp(0.0, 2.0);
+        self.scale = self.scale.clamp(0.25, 4.0);
+
+        self.autohide.delay_ms = self.autohide.delay_ms.min(5000);
+        self.autohide.duration_ms = self.autohide.duration_ms.clamp(50, 2000);
+        self.autohide.trigger_zone_size = self.autohide.trigger_zone_size.clamp(1, 64);
     }
 }

@@ -1,30 +1,39 @@
-use amane::{Align, Column, Justify, LayerWindow, Rectangle, Row, Widget};
-use model::bar::section::BarSection;
+use amane::{Align, Column, Justify, Row, Widget};
+use hex_color::HexColor;
+use model::{Font, bar::section::BarSection};
 
-use crate::module;
+use crate::module::module_view;
 
-fn horizontal_view(section: &BarSection) -> Row {
-    let modules: Vec<Box<dyn Widget>> = section
+pub fn section_view(section: &BarSection, is_bar_horizontal: bool, font: Font) -> Box<dyn Widget> {
+    let module_views = section
         .modules
         .iter()
-        .map(|m| Box::new(module::horizontal_view(m)) as Box<dyn Widget>)
+        .map(|m| {
+            module_view(
+                *m,
+                is_bar_horizontal,
+                font.clone(),
+                HexColor::YELLOW,
+                HexColor::BLACK,
+                12,
+                12,
+            )
+        })
         .collect();
 
-    Row::new(modules)
-        .gap(section.spacing as f32)
-        .justify(Justify::Center)
-        .align(Align::Center)
+    if is_bar_horizontal {
+        Box::new(
+            Row::new(module_views)
+                .gap(12.0)
+                .align(Align::Center)
+                .justify(Justify::Center),
+        )
+    } else {
+        Box::new(
+            Column::new(module_views)
+                .gap(12.0)
+                .align(Align::Center)
+                .justify(Justify::Center),
+        )
+    }
 }
-
-// fn vertical_view(section: &BarSection) -> Column {
-//     let modules: Vec<Box<dyn Widget>> = section
-//         .modules
-//         .iter()
-//         .map(|m| Box::new(module::vertical_view(m)) as Box<dyn Widget>)
-//         .collect();
-
-//     Column::new(modules)
-//         .gap(section.spacing as f32)
-//         .justify(Justify::Center)
-//         .align(Align::Center)
-// }

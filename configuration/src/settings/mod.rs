@@ -21,12 +21,14 @@ pub struct AppSettings {
 
 impl Sanitize for AppSettings {
     fn sanitize(&mut self) {
-        self.bars.sanitize();
         self.general.sanitize();
-        self.bars.iter_mut().for_each(|bar| {
+
+        self.bars.sanitize();
+
+        for bar in self.bars.iter_mut() {
             if bar.font.is_none() {
-                bar.font = Some(self.general.font.clone())
+                bar.font = Some(self.general.font.clone());
             }
-        });
+        }
     }
 }

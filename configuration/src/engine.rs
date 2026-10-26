@@ -41,14 +41,23 @@ impl SettingsEngine {
             serde_json::to_value(AppSettings::default()).unwrap_or(Value::Object(Map::new()));
 
         if NEODYMIUM_DEFAULT_SETTINGS_PATH.exists() {
+            println!("DEFAULT PATH EXISTS: true");
             match std::fs::read_to_string(&*NEODYMIUM_DEFAULT_SETTINGS_PATH) {
-                Ok(json) => match Self::parse_json(&json) {
-                    Ok(overlay) => Self::merge(&mut base, &overlay),
-                    Err(_) => {}
-                },
-
-                Err(_) => {}
+                Ok(json) => {
+                    println!("READ JSON LEN: {}", json.len());
+                    match Self::parse_json(&json) {
+                        Ok(overlay) => {
+                            println!("PARSE OVERLAY OK!");
+                            Self::merge(&mut base, &overlay);
+                            println!("AFTER MERGE: {:?}", base.get("bars").and_then(|b| b.get("top")).and_then(|t| t.get("enabled")));
+                        }
+                        Err(e) => println!("PARSE ERR: {}", e),
+                    }
+                }
+                Err(e) => println!("READ ERR: {}", e),
             }
+        } else {
+            println!("DEFAULT PATH DOES NOT EXIST: {}", NEODYMIUM_DEFAULT_SETTINGS_PATH.display());
         }
 
         if NEODYMIUM_USER_SETTINGS_PATH.exists() {
@@ -59,7 +68,13 @@ impl SettingsEngine {
             }
         }
 
-        let mut settings: AppSettings = serde_json::from_value(base).unwrap_or_default();
+        let mut settings: AppSettings = match serde_json::from_value(base.clone()) {
+            Ok(s) => s,
+            Err(e) => {
+                println!("DESERIALIZE ERROR FROM BASE: {}", e);
+                AppSettings::default()
+            }
+        };
         settings.sanitize();
         settings
     }
@@ -95,7 +110,8 @@ impl SettingsEngine {
     }
 
     pub fn parse_json(json: &str) -> Result<Value, serde_json::Error> {
-        let mut value = serde_json::from_str(json)?;
+        let stripped = json_comments::StripComments::new(json.as_bytes());
+        let mut value: Value = serde_json::from_reader(stripped)?;
         if let Value::Object(ref mut map) = value {
             map.remove("$schema");
         }
@@ -117,5 +133,17 @@ impl SettingsEngine {
 
             (slot, value) => *slot = value.clone(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_load() {
+        let settings = SettingsEngine::load();
+        println!("TEST LOAD TOP: {:#?}", settings.bars.top);
+        assert!(settings.bars.top.enabled);
     }
 }

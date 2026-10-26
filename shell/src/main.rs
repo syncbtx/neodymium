@@ -1,9 +1,10 @@
-use amane::{App, Service};
+use amane::{App, LayerWindow, Monitor, Service};
 use configuration::{
     NEODYMIUM_USER_SETTINGS_PATH, engine::SettingsEngine, resolve::Resolve,
     settings::GeneralSettings,
 };
 use model::bar::Bars;
+use ui::bar::bar_view;
 
 #[derive(Debug)]
 pub struct ShellState {
@@ -15,6 +16,7 @@ impl amane::Service for ShellState {
     fn new() -> Self {
         let _ = SettingsEngine::init();
         let settings = SettingsEngine::load();
+        println!("{:#?}", settings);
         Self {
             bars: settings.bars.resolve(),
             general: settings.general,
@@ -33,25 +35,36 @@ impl amane::Service for ShellState {
     }
 }
 
+fn top_bar_view(monitor: &Monitor) -> LayerWindow {
+    let state = ShellState::read();
+    bar_view(&state.bars.top, monitor)
+}
+
+fn right_bar_view(monitor: &Monitor) -> LayerWindow {
+    let state = ShellState::read();
+    bar_view(&state.bars.right, monitor)
+}
+
+fn bottom_bar_view(monitor: &Monitor) -> LayerWindow {
+    let state = ShellState::read();
+    bar_view(&state.bars.bottom, monitor)
+}
+
+fn left_bar_view(monitor: &Monitor) -> LayerWindow {
+    let state = ShellState::read();
+    bar_view(&state.bars.left, monitor)
+}
+
 fn main() -> Result<(), String> {
-    let shell = ShellState::new();
+    let state = ShellState::read();
+    // println!("{:#?}", state);
+    App::new()
+        .font(&state.general.font.path_or_name)
+        .window_per_monitor(top_bar_view)
+        .window_per_monitor(right_bar_view)
+        .window_per_monitor(bottom_bar_view)
+        .window_per_monitor(left_bar_view)
+        .run();
 
-    println!("{:#?}", shell);
-
-    ui::bar::init(shell.bars);
-
-    let views = ui::bar::views();
-
-    if views.is_empty() {
-        eprintln!("No bars enabled in configuration.");
-        return Ok(());
-    }
-
-    let mut app = App::new().font(&shell.general.font.path_or_name);
-    for view in views {
-        app = app.window_per_monitor(view);
-    }
-
-    app.run();
     Ok(())
 }

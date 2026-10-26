@@ -5,13 +5,19 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub enum Module {
     Spacer(u32),
+    #[serde(rename_all = "camelCase")]
     Workspaces {
-        collape_unused: bool,
+        #[serde(default, alias = "collape_unused", alias = "collapeUnused", alias = "collapse_unused")]
+        collapse_unused: bool,
     },
     ActiveWindowTitle,
+    #[serde(rename_all = "camelCase")]
     Calendar {
+        #[serde(default)]
         time: bool,
+        #[serde(default)]
         date: bool,
+        #[serde(default)]
         compact: bool,
     },
 }
