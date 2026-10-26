@@ -23,25 +23,24 @@ pub struct Insets<T: Default> {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
-#[serde(rename_all = "camelCase")]
-pub enum MajorAxisSize {
+pub enum MainAxisSize {
     #[default]
     Auto,
     Percent(u32),
     Pixels(u32),
 }
 
-impl Display for MajorAxisSize {
+impl Display for MainAxisSize {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            MajorAxisSize::Auto => write!(f, "auto"),
-            MajorAxisSize::Percent(pct) => write!(f, "{pct}%"),
-            MajorAxisSize::Pixels(px) => write!(f, "{px}px"),
+            MainAxisSize::Auto => write!(f, "auto"),
+            MainAxisSize::Percent(pct) => write!(f, "{pct}%"),
+            MainAxisSize::Pixels(px) => write!(f, "{px}px"),
         }
     }
 }
 
-impl FromStr for MajorAxisSize {
+impl FromStr for MainAxisSize {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -69,20 +68,20 @@ impl FromStr for MajorAxisSize {
     }
 }
 
-impl Serialize for MajorAxisSize {
+impl Serialize for MainAxisSize {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         s.collect_str(self)
     }
 }
 
-impl<'de> Deserialize<'de> for MajorAxisSize {
+impl<'de> Deserialize<'de> for MainAxisSize {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let s = Cow::<str>::deserialize(d)?;
         s.parse().map_err(de::Error::custom)
     }
 }
 
-impl JsonSchema for MajorAxisSize {
+impl JsonSchema for MainAxisSize {
     fn schema_name() -> Cow<'static, str> {
         "majorAxisSize".into()
     }

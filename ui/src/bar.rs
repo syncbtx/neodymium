@@ -1,15 +1,14 @@
 use std::sync::OnceLock;
 
 use amane::{
-    Center, Color, Column, End, Full, Horizontal, Layer, LayerWindow, Margin, Monitor, Padding,
-    Parent, Rectangle, Row, Service, Size, Start, Text, Vertical, Widget, WindowSize, Workspace,
+    Center, Color, Column, End, Full, Horizontal, LayerWindow, Margin, Monitor, Padding, Parent,
+    Rectangle, Row, Service, Size, Start, Text, Vertical, Widget, WindowSize, Workspace,
     Workspaces, Zone,
 };
-use configuration::{
-    settings::bars::{AttachmentMode, BarLayer, MajorAxisSize, ScreenCornerClaimer},
-    shared::Edge,
+use model::{
+    AttachmentMode, Edge, MainAxisSize, ScreenCornerClaimer,
+    bar::{Bar, Bars, module::Module, section::BarSection},
 };
-use model::bar::{Bar, Bars, module::BarModule, section::BarSection};
 
 use crate::color::hex_to_color;
 
@@ -74,6 +73,15 @@ fn bar_for(bars: &Bars, edge: Edge) -> &Bar {
         Edge::Right => &bars.right,
         Edge::Bottom => &bars.bottom,
         Edge::Left => &bars.left,
+    }
+}
+
+fn resolve_layer(layer: model::Layer) -> amane::Layer {
+    match layer {
+        model::Layer::Top => amane::Layer::Top,
+        model::Layer::Background => amane::Layer::Background,
+        model::Layer::Bottom => amane::Layer::Bottom,
+        model::Layer::Overlay => amane::Layer::Overlay,
     }
 }
 
@@ -173,7 +181,7 @@ fn render(edge: Edge, monitor: &Monitor) -> LayerWindow {
         ),
     };
 
-    let thickness = bar.minor_axis_size.get() as f32;
+    let thickness = bar.cross_axis_size as f32;
     let window_thickness = thickness + gap as f32;
     let (width, height): (WindowSize, WindowSize) = if is_horizontal {
         (Full.into(), window_thickness.into())
@@ -206,7 +214,7 @@ fn render(edge: Edge, monitor: &Monitor) -> LayerWindow {
     let window = LayerWindow::new()
         .width(width)
         .height(height)
-        .layer(resolve_layer(bar))
+        .layer(resolve_layer(bar.layer))
         .anchor_vertical(vertical)
         .anchor_horizontal(horizontal)
         .margin(margin)
@@ -215,13 +223,13 @@ fn render(edge: Edge, monitor: &Monitor) -> LayerWindow {
 
     let (bar_w, bar_h) = if is_horizontal {
         (
-            resolve_major_axis_size(&bar.major_axis_size, monitor, is_horizontal),
+            resolve_major_axis_size(&bar.main_axis_size, monitor, is_horizontal),
             Size::Fixed(thickness),
         )
     } else {
         (
             Size::Fixed(thickness),
-            resolve_major_axis_size(&bar.major_axis_size, monitor, is_horizontal),
+            resolve_major_axis_size(&bar.main_axis_size, monitor, is_horizontal),
         )
     };
 
@@ -238,10 +246,6 @@ fn render(edge: Edge, monitor: &Monitor) -> LayerWindow {
             left: pad_h,
         })
         .align_child(Center, Center);
-
-    if bar.border.width > 0 {
-        bar_rect = bar_rect.border(bar.border.width as f32, hex_to_color(bar.border.color));
-    }
 
     if !sections.is_empty() {
         if is_horizontal {
@@ -266,19 +270,11 @@ fn render(edge: Edge, monitor: &Monitor) -> LayerWindow {
     window.child(root)
 }
 
-fn resolve_layer(bar: &Bar) -> Layer {
-    match bar.layer {
-        BarLayer::Top => Layer::Top,
-        BarLayer::Bottom => Layer::Bottom,
-        BarLayer::Overlay => Layer::Overlay,
-    }
-}
-
-fn resolve_major_axis_size(size: &MajorAxisSize, monitor: &Monitor, is_horizontal: bool) -> Size {
+fn resolve_major_axis_size(size: &MainAxisSize, monitor: &Monitor, is_horizontal: bool) -> Size {
     match size {
-        MajorAxisSize::Auto => Parent,
-        MajorAxisSize::Pixels(px) => (*px as f32).into(),
-        MajorAxisSize::Percent(pct) => {
+        MainAxisSize::Auto => Parent,
+        MainAxisSize::Pixels(px) => (*px as f32).into(),
+        MainAxisSize::Percent(pct) => {
             let dim = if is_horizontal {
                 monitor.width
             } else {
@@ -297,8 +293,8 @@ fn section_widget(section: &BarSection, fallback_radius: u32, is_horizontal: boo
         .unwrap_or(Color::TRANSPARENT);
 
     let radius = section.border_radius.unwrap_or(fallback_radius) as f32;
-    let pad_h = section.major_axis_padding as f32;
-    let pad_v = section.minor_axis_padding as f32;
+    let pad_h = section.padding.top as f32;
+    let pad_v = section.padding.left as f32;
 
     let modules: Vec<Box<dyn Widget>> = section
         .modules
@@ -346,19 +342,19 @@ fn section_widget(section: &BarSection, fallback_radius: u32, is_horizontal: boo
             .child(col)
     };
 
-    if section.border.width > 0 {
-        rect = rect.border(
-            section.border.width as f32,
-            hex_to_color(section.border.color),
-        );
-    }
+    // if section.border.width > 0 {
+    //     rect = rect.border(
+    //         section.border.width as f32,
+    //         hex_to_color(section.border.color),
+    //     );
+    // }
 
     rect
 }
 
-fn build_module(module: &BarModule, is_horizontal: bool) -> Box<dyn Widget> {
+fn build_module(module: &Module, is_horizontal: bool) -> Box<dyn Widget> {
     match module {
-        BarModule::Spacer(gap) => {
+        Module::Spacer(gap) => {
             let gap = *gap as f32;
             let (w, h) = if is_horizontal {
                 (Size::Fixed(gap), Size::Parent)
@@ -367,13 +363,14 @@ fn build_module(module: &BarModule, is_horizontal: bool) -> Box<dyn Widget> {
             };
             Box::new(Rectangle::new().width(w).height(h).fill(Color::TRANSPARENT))
         }
-        BarModule::Workspaces(_) => workspaces_widget(is_horizontal),
-        BarModule::WindowTitle(_) => Box::new(
+        Module::Workspaces { .. } => workspaces_widget(is_horizontal),
+        Module::ActiveWindowTitle => Box::new(
             Rectangle::new()
                 .width(0.0)
                 .height(0.0)
                 .fill(Color::TRANSPARENT),
         ),
+        _ => Box::new(Rectangle::new().width(20.0).height(20.0)),
     }
 }
 

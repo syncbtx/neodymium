@@ -1,78 +1,19 @@
+use model::Font;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{settings::ConfigDomain, validate::ConfigValidate};
+use crate::{resolve::Resolve, validate::Sanitize};
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub enum FontWeight {
-    Thin,
-    ExtraLight,
-    Light,
-    #[default]
-    Regular,
-    Medium,
-    SemiBold,
-    Bold,
-    ExtraBold,
-    Black,
-}
-
-impl FontWeight {
-    pub const fn value(self) -> u16 {
-        match self {
-            Self::Thin => 100,
-            Self::ExtraLight => 200,
-            Self::Light => 300,
-            Self::Regular => 400,
-            Self::Medium => 500,
-            Self::SemiBold => 600,
-            Self::Bold => 700,
-            Self::ExtraBold => 800,
-            Self::Black => 900,
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub enum FontStyle {
-    #[default]
-    Regular,
-    Italic,
-    Oblique,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
-pub struct Font {
-    /// A family name ("JetBrains Mono") or a path to a font file ("~/fonts/Inter.ttf").
-    pub path_or_name: String,
-
-    pub weight: FontWeight,
-    pub style: FontStyle,
-}
-
-impl Default for Font {
-    fn default() -> Self {
-        Self {
-            path_or_name: "sans-serif".to_owned(),
-            weight: FontWeight::default(),
-            style: FontStyle::default(),
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-#[serde(default, deny_unknown_fields, rename_all = "camelCase")]
-pub struct AutohideConfig {
+pub struct Autohide {
     pub delay_ms: u32,
     pub duration_ms: u32,
     pub trigger_zone_size: u32,
     pub handle_size: u32,
 }
 
-impl Default for AutohideConfig {
+impl Default for Autohide {
     fn default() -> Self {
         Self {
             delay_ms: 150,
@@ -83,30 +24,34 @@ impl Default for AutohideConfig {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
-pub struct GeneralConfig {
-    pub autohide: AutohideConfig,
+pub struct GeneralSettings {
+    pub autohide: Autohide,
     pub scale: f32,
     pub font: Font,
 }
 
-impl Default for GeneralConfig {
+impl Default for GeneralSettings {
     fn default() -> Self {
         Self {
-            autohide: AutohideConfig::default(),
+            autohide: Autohide::default(),
             scale: 1.0,
             font: Font::default(),
         }
     }
 }
 
-impl ConfigDomain for GeneralConfig {
-    const SCHEMA_NAME: &'static str = "general";
+impl Resolve for GeneralSettings {
+    type Output = ();
+
+    fn resolve(&self) -> Self::Output {
+        ()
+    }
 }
 
-impl ConfigValidate for GeneralConfig {
-    fn validate(&self) -> Result<(), Vec<crate::validate::ValidationError>> {
-        Ok(())
+impl Sanitize for GeneralSettings {
+    fn sanitize(&mut self) {
+        self.scale = self.scale.clamp(0.0, 2.0);
     }
 }

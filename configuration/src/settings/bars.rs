@@ -1,392 +1,172 @@
 use hex_color::HexColor;
-use model::bar::module::{BarModule, workspaces::Workspaces};
-use schemars::{JsonSchema, json_schema};
-use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
-use std::{borrow::Cow, fmt::Display, num::NonZeroU32, str::FromStr};
-
-use crate::{
-    settings::ConfigDomain,
-    shared::{Alpha, Border, Edge},
-    validate::{ConfigValidate, ValidationError},
+use model::{
+    Alpha, AttachmentMode, Backdrop, BarBlend, Border, Edge, Font, Insets, Layer, MainAxisSize,
+    ScreenCornerClaimer,
+    bar::{Bar, Bars, module::Module, section::BarSection},
 };
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub enum BarLayer {
-    #[default]
-    Top,
-    Bottom,
-    Overlay,
-}
+use crate::{resolve::Resolve, settings::ConfigDomain, validate::Sanitize};
 
-#[derive(Debug, Copy, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub enum AttachmentMode {
-    #[default]
-    Floating,
-    Attached,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Default)]
-pub enum MajorAxisSize {
-    #[default]
-    Auto,
-    Percent(u32),
-    Pixels(u32),
-}
-
-<<<<<<< Updated upstream:configuration/src/settings/bars.rs
-=======
-impl Display for MajorAxisSize {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            MajorAxisSize::Auto => write!(f, "auto"),
-            MajorAxisSize::Percent(pct) => write!(f, "{pct}%"),
-            MajorAxisSize::Pixels(px) => write!(f, "{px}px"),
-        }
-    }
-}
-
-impl FromStr for MajorAxisSize {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s == "auto" {
-            return Ok(Self::Auto);
-        };
-
-        if let Some(pct) = s.strip_suffix("%") {
-            return pct
-                .parse::<u32>()
-                .map(Self::Percent)
-                .map_err(|_| format!("invalid percentage: {s:?}"));
-        };
-
-        if let Some(px) = s.strip_suffix("px") {
-            return px
-                .parse::<u32>()
-                .map(Self::Pixels)
-                .map_err(|_| format!("invalid pixels: {s:?}"));
-        };
-
-        Err(format!(
-            "expected \"auto\" | percentage like \"75%\" | pixels like \"1024px\" but found {s:?}"
-        ))
-    }
-}
-
-impl Serialize for MajorAxisSize {
-    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        s.collect_str(self)
-    }
-}
-
-impl<'de> Deserialize<'de> for MajorAxisSize {
-    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        let s = Cow::<str>::deserialize(d)?;
-        s.parse().map_err(de::Error::custom)
-    }
-}
-
-impl JsonSchema for MajorAxisSize {
-    fn schema_name() -> Cow<'static, str> {
-        "majorAxisSize".into()
-    }
-
-    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
-        json_schema!({
-            "type": "string",
-            "pattern": "^(auto|[0-9]+(\\.[0-9]+)?%|[0-9]+px)$",
-            "description": "Length of the bar along its edge: \"auto\" | \"50%\" | \"1920px\"."
-        })
-    }
-}
-
->>>>>>> Stashed changes:configuration/src/domain/bars.rs
-#[derive(Debug, Copy, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub enum BarBackdrop {
-    #[default]
-    None,
-    Blur {
-        radius: u32,
-    },
-    Waveform {
-        color: HexColor,
-        opacity: u32,
-    },
-    // Gradient,
-    // Glow
-}
-
-<<<<<<< Updated upstream:configuration/src/settings/bars.rs
-=======
-#[derive(Debug, Copy, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Serialize, Clone, Default, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
-pub struct Border {
-    pub width: u32,
-    pub color: HexColor,
-}
-
->>>>>>> Stashed changes:configuration/src/domain/bars.rs
-#[derive(Debug, Copy, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub enum ScreenCornerClaimer {
-    #[default]
-    HorizontalBars,
-    VerticalBars,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub enum ModuleConfig {
-    #[default]
-    WindowTitle,
-    Workspaces {
-        collapse_unused: bool,
-    },
-    Spacer(u32),
-}
-
-impl ModuleConfig {
-    pub fn to_model(&self) -> model::bar::module::BarModule {
-        match self {
-            ModuleConfig::Workspaces { .. } => BarModule::Workspaces(Workspaces),
-            ModuleConfig::Spacer(gap) => BarModule::Spacer(*gap),
-            ModuleConfig::WindowTitle => BarModule::Spacer(24),
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
-#[serde(default, deny_unknown_fields, rename_all = "camelCase")]
-pub struct BarBlend {
-    pub enabled: bool, // disable borders and apply border radius
-    pub radius: u32,   // no exclusive zone reserved
-}
-
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-#[serde(default, deny_unknown_fields, rename_all = "camelCase")]
-pub struct SectionConfig {
+pub struct SectionSettings {
     pub background: Option<HexColor>,
     pub foreground: Option<HexColor>, // hex | "contrast"
+    pub contrast: bool,               // hex | "contrast"
     pub opacity: u32,                 // must be explicitly overrided, defaults to 100
     pub spacing: u32,
-    pub major_axis_padding: u32,
-    pub minor_axis_padding: u32,
+    pub padding: Insets<u32>,
     pub border: Border,             // defaults to none
     pub border_radius: Option<u32>, // only freaks touch this
-    pub modules: Vec<ModuleConfig>,
+    pub modules: Vec<Module>,
 }
 
-impl SectionConfig {
-    pub fn to_model(&self) -> model::bar::section::BarSection {
-        let mut modules = Vec::new();
-        for cfg in self.modules.iter() {
-            modules.push(ModuleConfig::to_model(&cfg));
-        }
-        model::bar::section::BarSection {
+impl Resolve for SectionSettings {
+    type Output = BarSection;
+
+    fn resolve(&self) -> Self::Output {
+        BarSection {
             background: self.background,
             foreground: self.foreground,
+            contrast: self.contrast,
             opacity: self.opacity,
             spacing: self.spacing,
-            major_axis_padding: self.major_axis_padding,
-            minor_axis_padding: self.minor_axis_padding,
+            padding: self.padding,
             border: self.border,
             border_radius: self.border_radius,
-            modules,
+            modules: self.modules.clone(),
         }
     }
 }
 
-impl Default for SectionConfig {
-    fn default() -> Self {
-        Self {
-            background: None,
-            foreground: None,
-            opacity: 100,
-            spacing: 8,
-            major_axis_padding: 12,
-            minor_axis_padding: 12,
-            border: Border::default(),
-            border_radius: None,
-            modules: Vec::new(),
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Serialize, Clone, Default, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
-pub struct BarConfig {
+pub struct BarSettings {
     pub enabled: bool,
     pub edge: Edge,
-    pub layer: BarLayer,
+    pub layer: Layer,
+    pub attachment_mode: AttachmentMode,
     pub islands: bool,
     pub autohide: bool,
     pub border: Border,
     pub border_radius: u32,
     pub section_border_radius: u32, // global fallback for sections
-    pub backdrop: BarBackdrop,
+    pub backdrop: Backdrop,
     pub background: HexColor, // applied when backdrop is None and also serves as fallback for sections
     pub foreground: HexColor,
     pub contrast: bool,
-    pub opacity: Alpha, // applied strictly to the background
-    pub attachment_mode: AttachmentMode,
-    pub major_axis_size: MajorAxisSize, // length
-    pub minor_axis_size: NonZeroU32,    // thickness
-    pub major_axis_margin: u32,
-    pub minor_axis_margin: u32,
-    pub major_axis_padding: u32,
-    pub minor_axis_padding: u32,
-    pub sections: Vec<SectionConfig>,
+    pub opacity: Alpha,
+    pub main_axis_size: MainAxisSize, // length
+    pub cross_axis_size: u32,         // thickness
+    pub margin: Insets<u32>,
+    pub padding: Insets<u32>,
+    pub section_padding: Insets<u32>,
+    pub sections: Vec<SectionSettings>,
+    pub font: Option<Font>,
 }
 
-impl Default for BarConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            edge: Edge::default(),
-            layer: BarLayer::Top,
-            islands: false,
-            autohide: false,
-            border: Border::default(),
-            border_radius: 12,
-            section_border_radius: 12,
-            backdrop: BarBackdrop::None,
-            background: HexColor::BLACK,
-            foreground: HexColor::WHITE,
-            contrast: false,
-            opacity: Alpha::default(),
-            attachment_mode: AttachmentMode::Floating,
-            major_axis_size: MajorAxisSize::Percent(75),
-            minor_axis_size: NonZeroU32::new(32).unwrap(),
-            major_axis_margin: 0,
-            minor_axis_margin: 12,
-            major_axis_padding: 8,
-            minor_axis_padding: 8,
-            sections: vec![SectionConfig {
-                background: Some(hex_color::HexColor::GREEN),
-                foreground: Some(hex_color::HexColor::RED),
-                opacity: 255,
-                spacing: 24,
-                major_axis_padding: 12,
-                minor_axis_padding: 12,
-                border: Border {
-                    width: 0,
-                    color: HexColor::WHITE,
-                },
-                border_radius: None,
-                modules: vec![
-                    ModuleConfig::Spacer(64),
-                    ModuleConfig::Spacer(32),
-                    ModuleConfig::Spacer(12),
-                ],
-            }],
-        }
-    }
-}
+impl Resolve for BarSettings {
+    type Output = Bar;
 
-impl BarConfig {
-    pub fn to_model(&self) -> model::bar::Bar {
-        let mut sections = Vec::new();
-        for cfg in self.sections.iter() {
-            sections.push(SectionConfig::to_model(&cfg));
-        }
-        model::bar::Bar {
+    fn resolve(&self) -> Self::Output {
+        Bar {
             enabled: self.enabled,
-            exclusive_zone: true,
             edge: self.edge,
             layer: self.layer,
+            attachment_mode: self.attachment_mode,
+            exclusive_zone: true,
             islands: self.islands,
             autohide: self.autohide,
             border: self.border,
             border_radius: self.border_radius,
             section_border_radius: self.section_border_radius,
-            backdrop: self.backdrop,
+            backdrop: self.backdrop.clone(),
             background: self.background,
             foreground: self.foreground,
+            contrast: self.contrast,
             opacity: self.opacity,
-            attachment_mode: self.attachment_mode,
-            major_axis_size: self.major_axis_size,
-            minor_axis_size: self.minor_axis_size,
-            major_axis_margin: self.major_axis_margin,
-            minor_axis_margin: self.minor_axis_margin,
-            major_axis_padding: self.major_axis_padding,
-            minor_axis_padding: self.minor_axis_padding,
-            font: None,
-            sections,
-        }
-    }
-
-    pub fn validate_for_edge(&self, edge: Edge, errors: &mut Vec<ValidationError>) {
-        let thickness = self.minor_axis_size.get();
-        let total_padding = self.minor_axis_padding * 2;
-        if total_padding >= thickness {
-            errors.push(ValidationError::PaddingExceedsThickness {
-                edge,
-                total_padding,
-                thickness,
-            });
-        }
-
-        for (section_idx, section) in self.sections.iter().enumerate() {
-            if section.modules.is_empty() {
-                errors.push(ValidationError::SectionEmptyModules { edge, section_idx });
-            }
+            main_axis_size: self.main_axis_size,
+            cross_axis_size: self.cross_axis_size,
+            margin: self.margin,
+            padding: self.padding,
+            section_padding: self.section_padding,
+            sections: self.sections.iter().map(|m| m.resolve()).collect(),
+            font: self.font.clone(),
         }
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+impl Sanitize for BarSettings {
+    fn sanitize(&mut self) {}
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
-pub struct BarsConfig {
-    pub top: BarConfig,
-    pub right: BarConfig,
-    pub bottom: BarConfig,
-    pub left: BarConfig,
+pub struct BarsSettings {
+    pub top: BarSettings,
+    pub right: BarSettings,
+    pub bottom: BarSettings,
+    pub left: BarSettings,
     pub screen_corner_claimer: ScreenCornerClaimer,
     pub blend: BarBlend,
 }
 
-impl Default for BarsConfig {
-    fn default() -> Self {
-        let mut top = BarConfig::default();
-        top.enabled = true;
+impl<'a> IntoIterator for &'a BarsSettings {
+    type Item = &'a BarSettings;
+    type IntoIter = std::array::IntoIter<&'a BarSettings, 4>;
 
-        let mut right = BarConfig::default();
-        right.edge = Edge::Right;
-        let mut bottom = BarConfig::default();
-        bottom.edge = Edge::Bottom;
-        let mut left = BarConfig::default();
-        left.edge = Edge::Left;
-        Self {
-            top,
-            right,
-            bottom,
-            left,
-            screen_corner_claimer: ScreenCornerClaimer::default(),
-            blend: BarBlend::default(),
+    fn into_iter(self) -> Self::IntoIter {
+        [&self.top, &self.right, &self.bottom, &self.left].into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a mut BarsSettings {
+    type Item = &'a mut BarSettings;
+    type IntoIter = std::array::IntoIter<&'a mut BarSettings, 4>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        [
+            &mut self.top,
+            &mut self.right,
+            &mut self.bottom,
+            &mut self.left,
+        ]
+        .into_iter()
+    }
+}
+
+impl BarsSettings {
+    pub fn iter(&self) -> std::array::IntoIter<&BarSettings, 4> {
+        self.into_iter()
+    }
+
+    pub fn iter_mut(&mut self) -> std::array::IntoIter<&mut BarSettings, 4> {
+        self.into_iter()
+    }
+}
+
+impl Resolve for BarsSettings {
+    type Output = Bars;
+
+    fn resolve(&self) -> Self::Output {
+        Bars {
+            top: self.top.resolve(),
+            right: self.right.resolve(),
+            bottom: self.bottom.resolve(),
+            left: self.left.resolve(),
+            screen_corner_claimer: self.screen_corner_claimer,
+            blend: self.blend,
         }
     }
 }
 
-impl ConfigDomain for BarsConfig {
-    const SCHEMA_NAME: &'static str = "bars";
-}
-
-impl ConfigValidate for BarsConfig {
-    fn validate(&self) -> Result<(), Vec<ValidationError>> {
-        let mut errors = Vec::new();
-
-        self.top.validate_for_edge(Edge::Top, &mut errors);
-        self.right.validate_for_edge(Edge::Right, &mut errors);
-        self.bottom.validate_for_edge(Edge::Bottom, &mut errors);
-        self.left.validate_for_edge(Edge::Left, &mut errors);
-
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            Err(errors)
-        }
+impl Sanitize for BarsSettings {
+    fn sanitize(&mut self) {
+        self.top.edge = Edge::Top;
+        self.right.edge = Edge::Right;
+        self.bottom.edge = Edge::Bottom;
+        self.left.edge = Edge::Left;
     }
 }

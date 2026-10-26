@@ -1,12 +1,10 @@
 pub mod module;
 pub mod section;
 
-use std::num::NonZeroU32;
-
 use hex_color::HexColor;
 
 use crate::{
-    Alpha, AttachmentMode, Backdrop, BarBlend, Border, Edge, Font, Insets, Layer, MajorAxisSize,
+    Alpha, AttachmentMode, Backdrop, BarBlend, Border, Edge, Font, Insets, Layer, MainAxisSize,
     ScreenCornerClaimer, bar::section::BarSection,
 };
 
@@ -27,7 +25,8 @@ pub struct Bar {
     pub contrast: bool,
     pub opacity: Alpha,
     pub attachment_mode: AttachmentMode,
-    pub size: Insets<u32>,
+    pub main_axis_size: MainAxisSize,
+    pub cross_axis_size: u32,
     pub margin: Insets<u32>,
     pub padding: Insets<u32>,
     pub section_padding: Insets<u32>,
@@ -35,38 +34,53 @@ pub struct Bar {
     pub sections: Vec<BarSection>,
 }
 
-<<<<<<< Updated upstream
 impl Bar {
     pub fn is_horizontal(edge: Edge) -> bool {
         matches!(edge, Edge::Top | Edge::Bottom)
-=======
+    }
+}
+
 impl Default for Bar {
     fn default() -> Self {
         Self {
-            enabled: Default::default(),
-            exclusive_zone: Default::default(),
-            edge: Default::default(),
-            layer: Default::default(),
-            islands: Default::default(),
-            autohide: Default::default(),
-            border: Default::default(),
-            border_radius: Default::default(),
-            section_border_radius: Default::default(),
-            backdrop: Default::default(),
-            background: Default::default(),
-            foreground: Default::default(),
-            opacity: Default::default(),
-            attachment_mode: Default::default(),
-            major_axis_size: Default::default(),
-            minor_axis_size: NonZeroU32::new(24).unwrap(),
-            major_axis_margin: Default::default(),
-            minor_axis_margin: Default::default(),
-            major_axis_padding: Default::default(),
-            minor_axis_padding: Default::default(),
-            font: Default::default(),
-            sections: Default::default(),
+            enabled: false,
+            exclusive_zone: true,
+            edge: Edge::default(),
+            layer: Layer::default(),
+            islands: true,
+            autohide: false,
+            border: Border::default(),
+            border_radius: 8,
+            section_border_radius: 8,
+            backdrop: Backdrop::None,
+            background: HexColor::BLACK,
+            foreground: HexColor::WHITE,
+            contrast: true,
+            opacity: Alpha::default(),
+            attachment_mode: AttachmentMode::default(),
+            main_axis_size: MainAxisSize::default(),
+            cross_axis_size: 8,
+            margin: Insets {
+                top: 8,
+                right: 8,
+                bottom: 8,
+                left: 8,
+            },
+            padding: Insets {
+                top: 8,
+                right: 8,
+                bottom: 8,
+                left: 8,
+            },
+            section_padding: Insets {
+                top: 8,
+                right: 8,
+                bottom: 8,
+                left: 8,
+            },
+            font: Some(Font::default()),
+            sections: Vec::new(),
         }
->>>>>>> Stashed changes
     }
 }
 
@@ -78,4 +92,29 @@ pub struct Bars {
     pub left: Bar,
     pub screen_corner_claimer: ScreenCornerClaimer,
     pub blend: BarBlend,
+}
+
+impl IntoIterator for Bars {
+    type Item = Bar;
+
+    type IntoIter = std::array::IntoIter<Bar, 4>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        [self.top, self.right, self.bottom, self.left].into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a mut Bars {
+    type Item = &'a mut Bar;
+    type IntoIter = std::array::IntoIter<&'a mut Bar, 4>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        [
+            &mut self.top,
+            &mut self.right,
+            &mut self.bottom,
+            &mut self.left,
+        ]
+        .into_iter()
+    }
 }

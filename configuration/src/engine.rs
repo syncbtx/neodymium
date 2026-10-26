@@ -1,72 +1,121 @@
-use std::fs;
-
 use schemars::schema_for;
+use serde_json::{Map, Value};
 
 use crate::{
-    resolution::{self, fallback_dir, preferences_dir, preferences_file, schema_dir, schema_file},
-    settings::{ConfigDomain, bars::BarsConfig, core::CoreConfig, general::GeneralConfig},
+    NEODYMIUM_CACHE_DIR, NEODYMIUM_CONFIG_DIR, NEODYMIUM_DEFAULT_SETTINGS_PATH,
+    NEODYMIUM_SCHEMA_PATH, NEODYMIUM_STATE_DIR, NEODYMIUM_USER_SETTINGS_PATH,
+    settings::AppSettings, validate::Sanitize,
 };
 
-#[derive(Debug)]
-pub struct Settings {
-    pub core: CoreConfig,
-    pub edited: CoreConfig,
-}
+pub struct SettingsEngine;
 
-#[derive(Debug)]
-pub struct ConfigEngine {
-    pub core_config: CoreConfig,
-}
+impl SettingsEngine {
+    pub fn init() -> Result<(), String> {
+        std::fs::create_dir_all(&*NEODYMIUM_CONFIG_DIR).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(&*NEODYMIUM_STATE_DIR).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(&*NEODYMIUM_CACHE_DIR).map_err(|e| e.to_string())?;
 
-impl Default for ConfigEngine {
-    fn default() -> Self {
-        Self {
-            core_config: Default::default(),
-        }
-    }
-}
-
-impl ConfigEngine {
-    pub fn init() -> Result<Self, String> {
-        std::fs::create_dir_all(schema_dir()).map_err(|e| e.to_string())?;
-        std::fs::create_dir_all(fallback_dir()).map_err(|e| e.to_string())?;
-        std::fs::create_dir_all(preferences_dir()).map_err(|e| e.to_string())?;
-
-        let core_config = CoreConfig::aggregate()?;
-        Ok(Self { core_config })
+        Self::export_schema()
     }
 
-    pub fn export_schemas() -> Result<(), String> {
-        Self::export_schema::<BarsConfig>()?;
-        Self::export_schema::<GeneralConfig>()?;
-        println!("\x1b[32mconfig schemas exported\x1b[0m");
-        Ok(())
-    }
+    pub fn export_schema() -> Result<(), String> {
+        let mut schema =
+            serde_json::to_value(schema_for!(AppSettings)).map_err(|e| e.to_string())?;
 
-    fn export_schema<D: ConfigDomain>() -> Result<(), String> {
-        let mut schema = serde_json::to_value(schema_for!(D)).map_err(|e| e.to_string())?;
         if let Some(props) = schema.get_mut("properties").and_then(|p| p.as_object_mut()) {
             props.insert(
                 "$schema".to_string(),
                 serde_json::json!({
                     "type": "string",
-                    "description": "Path or URL of this schema, for editors. Ignored by Neodymium."
+                    "description": "Path or URL to the schema file for editor validation."
                 }),
             );
-        };
+        }
+
         let pretty = serde_json::to_string_pretty(&schema).map_err(|e| e.to_string())?;
-        std::fs::write(schema_file(D::SCHEMA_NAME), pretty).map_err(|e| e.to_string())
+        std::fs::write(&*NEODYMIUM_SCHEMA_PATH, pretty).map_err(|e| e.to_string())
     }
 
-    pub fn save_changes<D: ConfigDomain>(&self, updated: D) -> Result<(), String> {
-        let base = serde_json::to_value(D::default()).map_err(|e| e.to_string())?;
-        let target = serde_json::to_value(updated).map_err(|e| e.to_string())?;
+    pub fn load() -> AppSettings {
+        let mut base =
+            serde_json::to_value(AppSettings::default()).unwrap_or(Value::Object(Map::new()));
 
-        let sparse = resolution::diff(&base, &target)
-            .unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
+        if NEODYMIUM_DEFAULT_SETTINGS_PATH.exists() {
+            match std::fs::read_to_string(&*NEODYMIUM_DEFAULT_SETTINGS_PATH) {
+                Ok(json) => match Self::parse_json(&json) {
+                    Ok(overlay) => Self::merge(&mut base, &overlay),
+                    Err(_) => {}
+                },
 
-        let pretty = serde_json::to_string_pretty(&sparse).map_err(|e| e.to_string())?;
-        let path = preferences_file(D::SCHEMA_NAME);
-        fs::write(path, pretty).map_err(|e| e.to_string())
+                Err(_) => {}
+            }
+        }
+
+        if NEODYMIUM_USER_SETTINGS_PATH.exists() {
+            if let Ok(json) = std::fs::read_to_string(&*NEODYMIUM_USER_SETTINGS_PATH) {
+                if let Ok(overlay) = Self::parse_json(&json) {
+                    Self::merge(&mut base, &overlay);
+                }
+            }
+        }
+
+        let mut settings: AppSettings = serde_json::from_value(base).unwrap_or_default();
+        settings.sanitize();
+        settings
+    }
+
+    pub fn reload() -> Option<AppSettings> {
+        let mut base =
+            serde_json::to_value(AppSettings::default()).unwrap_or(Value::Object(Map::new()));
+
+        if NEODYMIUM_DEFAULT_SETTINGS_PATH.exists() {
+            if let Ok(json) = std::fs::read_to_string(&*NEODYMIUM_DEFAULT_SETTINGS_PATH) {
+                let overlay = match Self::parse_json(&json) {
+                    Ok(v) => v,
+                    Err(_) => return None,
+                };
+
+                Self::merge(&mut base, &overlay);
+            }
+        }
+
+        if NEODYMIUM_USER_SETTINGS_PATH.exists() {
+            if let Ok(json) = std::fs::read_to_string(&*NEODYMIUM_USER_SETTINGS_PATH) {
+                let overlay = match Self::parse_json(&json) {
+                    Ok(v) => v,
+                    Err(_) => return None,
+                };
+                Self::merge(&mut base, &overlay);
+            }
+        }
+
+        let mut settings: AppSettings = serde_json::from_value(base).unwrap_or_default();
+        settings.sanitize();
+        Some(settings)
+    }
+
+    pub fn parse_json(json: &str) -> Result<Value, serde_json::Error> {
+        let mut value = serde_json::from_str(json)?;
+        if let Value::Object(ref mut map) = value {
+            map.remove("$schema");
+        }
+        Ok(value)
+    }
+
+    pub fn merge(base: &mut Value, overlay: &Value) {
+        match (base, overlay) {
+            (Value::Object(b), Value::Object(o)) => {
+                for (k, v) in o {
+                    match b.get_mut(k) {
+                        Some(slot) => Self::merge(slot, v),
+                        None => {
+                            b.insert(k.clone(), v.clone());
+                        }
+                    }
+                }
+            }
+
+            (slot, value) => *slot = value.clone(),
+        }
     }
 }
