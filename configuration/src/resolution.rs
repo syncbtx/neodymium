@@ -1,6 +1,6 @@
 use std::{env, path::PathBuf, sync::LazyLock};
 
-use serde_json::{Map, Value};
+use serde_json::Value;
 
 const HOME_UNSET_ERR_MESSAGE: &str = "CRITICAL: unable to resolve home directory, $HOME is unset";
 

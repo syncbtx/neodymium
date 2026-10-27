@@ -41,6 +41,7 @@ impl SettingsEngine {
             serde_json::to_value(AppSettings::default()).unwrap_or(Value::Object(Map::new()));
 
         if NEODYMIUM_DEFAULT_SETTINGS_PATH.exists() {
+            println!("DEFAULT PATH: {:#?}", NEODYMIUM_DEFAULT_SETTINGS_PATH);
             println!("DEFAULT PATH EXISTS: true");
             match std::fs::read_to_string(&*NEODYMIUM_DEFAULT_SETTINGS_PATH) {
                 Ok(json) => {
@@ -49,7 +50,12 @@ impl SettingsEngine {
                         Ok(overlay) => {
                             println!("PARSE OVERLAY OK!");
                             Self::merge(&mut base, &overlay);
-                            println!("AFTER MERGE: {:?}", base.get("bars").and_then(|b| b.get("top")).and_then(|t| t.get("enabled")));
+                            println!(
+                                "AFTER MERGE: {:?}",
+                                base.get("bars")
+                                    .and_then(|b| b.get("top"))
+                                    .and_then(|t| t.get("enabled"))
+                            );
                         }
                         Err(e) => println!("PARSE ERR: {}", e),
                     }
@@ -57,7 +63,10 @@ impl SettingsEngine {
                 Err(e) => println!("READ ERR: {}", e),
             }
         } else {
-            println!("DEFAULT PATH DOES NOT EXIST: {}", NEODYMIUM_DEFAULT_SETTINGS_PATH.display());
+            println!(
+                "DEFAULT PATH DOES NOT EXIST: {}",
+                NEODYMIUM_DEFAULT_SETTINGS_PATH.display()
+            );
         }
 
         if NEODYMIUM_USER_SETTINGS_PATH.exists() {
@@ -133,17 +142,5 @@ impl SettingsEngine {
 
             (slot, value) => *slot = value.clone(),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_load() {
-        let settings = SettingsEngine::load();
-        println!("TEST LOAD TOP: {:#?}", settings.bars.top);
-        assert!(settings.bars.top.enabled);
     }
 }

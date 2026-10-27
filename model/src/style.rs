@@ -76,12 +76,17 @@ pub enum Border {
     },
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum AttachmentMode {
-    #[default]
-    Floating,
-    Attached,
+    Floating { margin: u32 },
+    Attached { morph: bool },
+}
+
+impl Default for AttachmentMode {
+    fn default() -> Self {
+        Self::Floating { margin: 12 }
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, JsonSchema)]

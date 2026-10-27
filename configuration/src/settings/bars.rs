@@ -1,8 +1,12 @@
 use hex_color::HexColor;
 use model::{
-    Alpha, AttachmentMode, Backdrop, BarBlend, Border, Edge, Font, Insets, Layer, MainAxisSize,
-    ScreenCornerClaimer,
-    bar::{Bar, Bars, module::Module, section::BarSection},
+    Alpha, AttachmentMode, Backdrop, BarBlend, Border, Edge, Font, Insets, Justify, Layer,
+    MainAxisSize, ScreenCornerClaimer,
+    bar::{
+        Bar, Bars,
+        module::Module,
+        section::{BarSection, BarSectionColors},
+    },
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -20,6 +24,7 @@ pub struct SectionSettings {
     pub padding: Insets<u32>,
     pub border: Border,             // defaults to none
     pub border_radius: Option<u32>, // only freaks touch this
+    pub colors: BarSectionColors,
     pub modules: Vec<Module>,
 }
 
@@ -36,6 +41,7 @@ impl Resolve for SectionSettings {
             padding: self.padding,
             border: self.border,
             border_radius: self.border_radius,
+            colors: self.colors,
             modules: self.modules.clone(),
         }
     }
@@ -81,11 +87,12 @@ pub struct BarSettings {
     pub contrast: bool,
     pub opacity: Alpha,
     pub main_axis_size: MainAxisSize, // length
-    pub cross_axis_size: u32,         // thickness
+    pub section_cross_axis_size: u32, // section thickness
     pub margin: Insets<u32>,
     pub padding: Insets<u32>,
     pub section_padding: Insets<u32>,
     pub sections: Vec<SectionSettings>,
+    pub sections_justify: Justify,
     pub font: Option<Font>,
 }
 
@@ -110,11 +117,12 @@ impl Resolve for BarSettings {
             contrast: self.contrast,
             opacity: self.opacity,
             main_axis_size: self.main_axis_size,
-            cross_axis_size: self.cross_axis_size,
+            section_cross_axis_size: self.section_cross_axis_size,
             margin: self.margin,
             padding: self.padding,
             section_padding: self.section_padding,
             sections: self.sections.iter().map(|m| m.resolve()).collect(),
+            sections_justify: self.sections_justify,
             font: self.font.clone(),
         }
     }
@@ -122,8 +130,8 @@ impl Resolve for BarSettings {
 
 impl Sanitize for BarSettings {
     fn sanitize(&mut self) {
-        if self.cross_axis_size < 16 {
-            self.cross_axis_size = 24;
+        if self.section_cross_axis_size < 16 {
+            self.section_cross_axis_size = 24;
         }
 
         match &mut self.main_axis_size {
@@ -132,7 +140,7 @@ impl Sanitize for BarSettings {
             MainAxisSize::Auto => {}
         }
 
-        let half_thickness = self.cross_axis_size / 2;
+        let half_thickness = self.section_cross_axis_size / 2;
         match self.edge {
             Edge::Top | Edge::Bottom => {
                 if self.padding.top + self.padding.bottom >= half_thickness {
@@ -148,12 +156,14 @@ impl Sanitize for BarSettings {
             }
         }
 
-        self.border_radius = self.border_radius.min(self.cross_axis_size / 2);
-        self.section_border_radius = self.section_border_radius.min(self.cross_axis_size / 2);
+        self.border_radius = self.border_radius.min(self.section_cross_axis_size / 2);
+        self.section_border_radius = self
+            .section_border_radius
+            .min(self.section_cross_axis_size / 2);
 
         self.sections.retain(|sec| !sec.modules.is_empty());
         for sec in &mut self.sections {
-            sec.sanitize(self.cross_axis_size);
+            sec.sanitize(self.section_cross_axis_size);
         }
 
         if self.sections.is_empty() {

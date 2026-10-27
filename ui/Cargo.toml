@@ -5,5 +5,5 @@ edition = "2024"
 
 [dependencies]
 model = { path = "../model" }
-amane = {git = "https://github.com/MystiaFin/amane.git", tag = "0.1.1"}
-hex_color = {path = "../../../Projects/hex_color", features = ["serde", "schemars"]}
+amane = {git = "https://github.com/MystiaFin/amane.git"}
+hex_color = {path = "/home/syncbtx/Projects/hex_color", features = ["serde", "schemars"]}
