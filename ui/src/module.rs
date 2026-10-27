@@ -6,6 +6,33 @@ use model::{
 
 use crate::color::resolve_color;
 
+pub struct FocusedWindow {
+    pub id: String,
+}
+
+impl FocusedWindow {
+    pub fn query() -> String {
+        let out = amane::output("niri msg --json focused-window");
+        match serde_json::from_str::<serde_json::Value>(&out) {
+            Ok(v) => v.get("app_id").unwrap().to_string(),
+            Err(_) => "focused title".to_string(),
+        }
+    }
+}
+
+impl amane::Service for FocusedWindow {
+    fn new() -> Self {
+        Self { id: Self::query() }
+    }
+
+    fn listen() {
+        amane::lines("niri msg event-stream")
+            .into_iter()
+            .filter(|_| Self::read().id != Self::query())
+            .for_each(|_| Self::write().id = Self::query());
+    }
+}
+
 pub fn view(
     module: Module,
     thickness: f32,
@@ -31,7 +58,7 @@ pub fn view(
                     Rectangle::new()
                         .width(thickness)
                         .height(main_axis_size as f32)
-                        .radius(radius)
+                        .radius(4.0)
                         .fill(resolve_color(colors.module_background)),
                 ) as Box<dyn Widget>
             }
@@ -59,6 +86,7 @@ pub fn view(
             let pills = workspaces
                 .list()
                 .iter()
+                .filter(|ws| ws.windows() > 0 || (ws.windows() == 0 && ws.focused()))
                 .map(|ws| {
                     Box::new(
                         Rectangle::new()
@@ -68,7 +96,7 @@ pub fn view(
                             .fill(resolve_color(colors.module_background))
                             .align_child(Align::Center, Align::Center)
                             .child(
-                                Text::new(format!("{}", ws.id()))
+                                Text::new(format!("{}", ws.index()))
                                     .size(font_size)
                                     .font(&font.path_or_name)
                                     .weight(font_weight)
@@ -85,10 +113,11 @@ pub fn view(
             }
         }
         Module::ActiveWindowTitle => {
-            let active = "active window";
+            amane::DesktopApp::
+            let title = FocusedWindow::read();
             if is_horizontal {
                 Box::new(
-                    Text::new(format!("{}", active))
+                    Text::new(format!("{}", title.id))
                         .font(&font.path_or_name)
                         .size(font_size)
                         .weight(font_weight)
@@ -97,7 +126,7 @@ pub fn view(
                 ) as Box<dyn Widget>
             } else {
                 Box::new(
-                    Text::new(format!("{}", active))
+                    Text::new(format!("{}", title.id))
                         .size(font_size)
                         .weight(font_weight)
                         .color(resolve_color(colors.foreground))

@@ -88,34 +88,26 @@ impl SettingsEngine {
         settings
     }
 
-    pub fn reload() -> Option<AppSettings> {
-        let mut base =
-            serde_json::to_value(AppSettings::default()).unwrap_or(Value::Object(Map::new()));
-
-        if NEODYMIUM_DEFAULT_SETTINGS_PATH.exists() {
-            if let Ok(json) = std::fs::read_to_string(&*NEODYMIUM_DEFAULT_SETTINGS_PATH) {
-                let overlay = match Self::parse_json(&json) {
-                    Ok(v) => v,
-                    Err(_) => return None,
-                };
-
-                Self::merge(&mut base, &overlay);
-            }
+    fn read_layer(path: &std::path::Path, base: &mut Value) -> Result<(), String> {
+        if !path.exists() {
+            return Ok(());
         }
-
-        if NEODYMIUM_USER_SETTINGS_PATH.exists() {
-            if let Ok(json) = std::fs::read_to_string(&*NEODYMIUM_USER_SETTINGS_PATH) {
-                let overlay = match Self::parse_json(&json) {
-                    Ok(v) => v,
-                    Err(_) => return None,
-                };
-                Self::merge(&mut base, &overlay);
-            }
+        let json = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        if json.trim().is_empty() {
+            return Err(format!("{}: empty (mid-write?)", path.display()));
         }
+        let overlay = Self::parse_json(&json).map_err(|e| format!("{}: {e}", path.display()))?;
+        Self::merge(base, &overlay);
+        Ok(())
+    }
 
-        let mut settings: AppSettings = serde_json::from_value(base).unwrap_or_default();
+    pub fn reload() -> Result<AppSettings, String> {
+        let mut base = serde_json::to_value(AppSettings::default()).map_err(|e| e.to_string())?;
+        Self::read_layer(&NEODYMIUM_DEFAULT_SETTINGS_PATH, &mut base)?;
+        Self::read_layer(&NEODYMIUM_USER_SETTINGS_PATH, &mut base)?;
+        let mut settings: AppSettings = serde_json::from_value(base).map_err(|e| e.to_string())?;
         settings.sanitize();
-        Some(settings)
+        Ok(settings)
     }
 
     pub fn parse_json(json: &str) -> Result<Value, serde_json::Error> {

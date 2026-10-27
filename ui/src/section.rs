@@ -16,10 +16,10 @@ pub fn view(section: &BarSection, parent: &Bar) -> Box<dyn Widget> {
     };
 
     let (inner_cross, module_thickness) = if is_bar_horizontal {
-        let t = (cross_size - padding.top - padding.bottom).max(8.0);
+        let t = (cross_size - padding.top - padding.bottom).max(16.0);
         (Size::Fixed(t), t)
     } else {
-        let t = (cross_size - padding.left - padding.right).max(8.0);
+        let t = (cross_size - padding.left - padding.right).max(16.0);
         (Size::Fixed(t), t)
     };
 
@@ -34,7 +34,7 @@ pub fn view(section: &BarSection, parent: &Bar) -> Box<dyn Widget> {
                 section.border_radius.unwrap_or_default() as f32,
                 &section.colors,
                 &font,
-                12.0,
+                10.0,
                 700,
             )
         })

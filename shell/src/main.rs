@@ -15,22 +15,32 @@ impl amane::Service for ShellState {
     fn new() -> Self {
         let _ = SettingsEngine::init();
         let settings = SettingsEngine::load();
-        println!("{:#?}", settings);
-        Self {
+        // println!("{:#?}", settings);
+        let mut state = Self {
             bars: settings.bars.resolve(),
             general: settings.general,
-        }
+        };
+        state.update();
+        state
     }
 
     fn listen() {
-        let changes = amane::watch_file(&NEODYMIUM_USER_SETTINGS_PATH.to_string_lossy());
-        changes.for_each(|_| {
-            if let Some(settings) = SettingsEngine::reload() {
-                let mut state = Self::write();
-                state.bars = settings.bars.resolve();
-                state.general = settings.general;
+        let path = NEODYMIUM_USER_SETTINGS_PATH.to_string_lossy().to_string();
+        eprintln!("watching {path}");
+
+        for _ in amane::watch_file(&path) {
+            match SettingsEngine::reload() {
+                Ok(settings) => {
+                    let mut state = ShellState::write();
+                    state.bars = settings.bars.resolve();
+                    state.general = settings.general;
+                }
+                Err(e) => {
+                    eprintln!("reload failed");
+                    eprintln!("{}", e)
+                }
             }
-        });
+        }
     }
 }
 
@@ -55,14 +65,18 @@ fn left_bar_view(monitor: &Monitor) -> LayerWindow {
 }
 
 fn main() -> Result<(), String> {
-    let state = ShellState::read();
+    let _ = SettingsEngine::init();
+    let settings = SettingsEngine::load();
+    let general = settings.general;
+    let _ = settings.bars;
 
     amane::App::new()
-        .font(&state.general.font.path_or_name)
+        .font(&general.font.path_or_name)
         .window_per_monitor(top_bar_view)
         .window_per_monitor(right_bar_view)
         .window_per_monitor(bottom_bar_view)
         .window_per_monitor(left_bar_view)
+        .scale_factor(general.scale.clamp(0.4, 2.0))
         .run();
 
     Ok(())

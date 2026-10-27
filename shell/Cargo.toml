@@ -11,4 +11,4 @@ path = '/home/syncbtx/Linux/neodymium/shell/src/main.rs'
 configuration = {path = "../configuration"}
 model = {path = "../model"}
 ui = {path = "../ui"}
-amane = {git = "https://github.com/MystiaFin/amane.git"}
+amane = {git = "https://github.com/MystiaFin/amane.git", tag="v.0.1.2-experimental"}
