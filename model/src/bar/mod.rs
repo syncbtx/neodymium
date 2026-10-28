@@ -4,7 +4,7 @@ pub mod section;
 use hex_color::HexColor;
 
 use crate::{
-    Alpha, AttachmentMode, Backdrop, BarBlend, Border, Edge, Font, Insets, Justify, Layer,
+    Alpha, Anchor, AttachmentMode, Backdrop, BarBlend, Border, Edge, Font, Insets, Justify, Layer,
     MainAxisSize, ScreenCornerClaimer, bar::section::BarSection,
 };
 
@@ -13,9 +13,11 @@ pub struct Bar {
     pub enabled: bool,
     pub exclusive_zone: bool,
     pub edge: Edge,
+    pub anchor: Anchor,
     pub layer: Layer,
     pub islands: bool,
     pub autohide: bool,
+    pub spacing: u32,
     pub border: Border,
     pub border_radius: u32,
     pub section_border_radius: u32,
@@ -47,9 +49,11 @@ impl Default for Bar {
             enabled: false,
             exclusive_zone: true,
             edge: Edge::default(),
+            anchor: Anchor::default(),
             layer: Layer::default(),
             islands: true,
             autohide: false,
+            spacing: 8,
             border: Border::default(),
             border_radius: 8,
             section_border_radius: 8,

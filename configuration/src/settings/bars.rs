@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use hex_color::HexColor;
 use model::{
-    Alpha, AttachmentMode, Backdrop, BarBlend, Border, Edge, Font, Insets, Justify, Layer,
+    Alpha, Anchor, AttachmentMode, Backdrop, BarBlend, Border, Edge, Font, Insets, Justify, Layer,
     MainAxisSize, ScreenCornerClaimer,
     bar::{
         Bar, Bars,
@@ -76,9 +76,11 @@ impl SectionSettings {
 pub struct BarSettings {
     pub enabled: bool,
     pub edge: Edge,
+    pub anchor: Anchor,
     pub layer: Layer,
     pub attachment_mode: AttachmentMode,
     pub islands: bool,
+    pub spacing: u32,
     pub autohide: bool,
     pub border: Border,
     pub border_radius: u32,
@@ -103,10 +105,12 @@ impl Default for BarSettings {
         Self {
             enabled: false,
             edge: Edge::default(),
+            anchor: Anchor::default(),
             layer: Layer::default(),
             attachment_mode: AttachmentMode::Floating { margin: 8 },
             islands: false,
             autohide: false,
+            spacing: 8,
             border: Border::default(),
             border_radius: 8,
             section_border_radius: 8,
@@ -178,11 +182,13 @@ impl Resolve for BarSettings {
         Bar {
             enabled: self.enabled,
             edge: self.edge,
+            anchor: self.anchor,
             layer: self.layer,
             attachment_mode: self.attachment_mode,
             exclusive_zone: true,
             islands: self.islands,
             autohide: self.autohide,
+            spacing: self.spacing,
             border: self.border,
             border_radius: self.border_radius,
             section_border_radius: self.section_border_radius,

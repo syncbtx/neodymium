@@ -1,7 +1,14 @@
 - edge dedicated bars [TOP | RIGHT | BOTTOM | LEFT]
-- ui scaling: not new at all
+- consistent ui scaling: not new at all
 - color collection: shader system to apply color effects like fullscreen grayscale
 - camera recording screen inspired window borders, and config template[]
 - wallpaper parallax
-- 
+- bar design: 
+  - bars associated with a screen edge[TOP, RIGHT, BOTTOM, LEFT]. 
+    - corner associated bars as extenstion. L-bar and 7-bar. this might require a second mode. implementation approach might be splitting the edge associated bars in half 
+  - no transition between orientations. 
+  - allow swapping bars with the same orientation
+  - allow reversing bar section order
+  - allow users to save their settings as presets and load them at anytime with validation
+  
 -
