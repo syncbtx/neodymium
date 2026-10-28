@@ -18,20 +18,24 @@ pub enum Module {
         )]
         collapse_unused: bool,
     },
-    ActiveWindowTitle,
+    FocusedWindowIcon,
     #[serde(rename_all = "camelCase")]
     Calendar {
         #[serde(default)]
         time: bool,
         #[serde(default)]
+        format_24_hrs: bool,
+        #[serde(default)]
         date: bool,
         #[serde(default)]
         compact: bool,
     },
+    Divider,
+    Ring,
 }
 
 impl Default for Module {
     fn default() -> Self {
-        Self::ActiveWindowTitle
+        Self::FocusedWindowIcon
     }
 }

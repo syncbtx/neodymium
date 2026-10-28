@@ -15,11 +15,22 @@ pub enum Edge {
 
 #[derive(Debug, Copy, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
-pub struct Insets<T: Default> {
+pub struct Insets<T: Default + Copy + Clone> {
     pub top: T,
     pub right: T,
     pub bottom: T,
     pub left: T,
+}
+
+impl<T: Default + Copy + Clone> Insets<T> {
+    pub fn all(value: T) -> Self {
+        Self {
+            top: value,
+            right: value,
+            bottom: value,
+            left: value,
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]

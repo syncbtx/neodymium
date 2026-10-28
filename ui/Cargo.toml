@@ -4,7 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+
 model = { path = "../model" }
+# configuration = { path = "../configuration" }
 amane = {git = "https://github.com/MystiaFin/amane.git", tag="v.0.1.2-experimental"}
 hex_color = {path = "/home/syncbtx/Projects/hex_color", features = ["serde", "schemars"]}
 serde_json = "1.0.154"

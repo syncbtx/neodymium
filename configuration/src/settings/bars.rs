@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use hex_color::HexColor;
 use model::{
     Alpha, AttachmentMode, Backdrop, BarBlend, Border, Edge, Font, Insets, Justify, Layer,
@@ -69,7 +71,7 @@ impl SectionSettings {
     }
 }
 
-#[derive(Debug, Serialize, Clone, Default, Deserialize, JsonSchema)]
+#[derive(Debug, Serialize, Clone, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
 pub struct BarSettings {
     pub enabled: bool,
@@ -94,6 +96,79 @@ pub struct BarSettings {
     pub sections: Vec<SectionSettings>,
     pub sections_justify: Justify,
     pub font: Option<Font>,
+}
+
+impl Default for BarSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            edge: Edge::default(),
+            layer: Layer::default(),
+            attachment_mode: AttachmentMode::Floating { margin: 8 },
+            islands: false,
+            autohide: false,
+            border: Border::default(),
+            border_radius: 8,
+            section_border_radius: 8,
+            backdrop: Backdrop::default(),
+            background: HexColor::from_str("#ecdecdff").unwrap(),
+            foreground: HexColor::from_str("#1cec1cff").unwrap(),
+            contrast: true,
+            opacity: Alpha::default(),
+            main_axis_size: MainAxisSize::Percent(80),
+            section_cross_axis_size: 24,
+            margin: Insets::default(),
+            padding: Insets::all(8),
+            section_padding: Insets::all(8),
+            sections: vec![
+                SectionSettings {
+                    background: None,
+                    foreground: None,
+                    contrast: true,
+                    opacity: 255,
+                    spacing: 8,
+                    padding: Insets::all(8),
+                    border: Border::None,
+                    border_radius: Some(8),
+                    colors: BarSectionColors::default(),
+                    modules: vec![Module::Workspaces {
+                        collapse_unused: true,
+                    }],
+                },
+                SectionSettings {
+                    background: None,
+                    foreground: None,
+                    contrast: true,
+                    opacity: 255,
+                    spacing: 8,
+                    padding: Insets::all(8),
+                    border: Border::None,
+                    border_radius: Some(8),
+                    colors: BarSectionColors::default(),
+                    modules: vec![Module::Calendar {
+                        time: true,
+                        format_24_hrs: true,
+                        date: true,
+                        compact: false,
+                    }],
+                },
+                SectionSettings {
+                    background: None,
+                    foreground: None,
+                    contrast: true,
+                    opacity: 255,
+                    spacing: 8,
+                    padding: Insets::all(8),
+                    border: Border::None,
+                    border_radius: Some(8),
+                    colors: BarSectionColors::default(),
+                    modules: vec![Module::FocusedWindowIcon],
+                },
+            ],
+            sections_justify: Justify::default(),
+            font: Some(Font::default()),
+        }
+    }
 }
 
 impl Resolve for BarSettings {
@@ -172,7 +247,7 @@ impl Sanitize for BarSettings {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
 pub struct BarsSettings {
     pub top: BarSettings,
@@ -181,6 +256,21 @@ pub struct BarsSettings {
     pub left: BarSettings,
     pub screen_corner_claimer: ScreenCornerClaimer,
     pub blend: BarBlend,
+}
+
+impl Default for BarsSettings {
+    fn default() -> Self {
+        let mut top = BarSettings::default();
+        top.enabled = true;
+        Self {
+            top: top,
+            right: BarSettings::default(),
+            bottom: BarSettings::default(),
+            left: BarSettings::default(),
+            screen_corner_claimer: ScreenCornerClaimer::default(),
+            blend: BarBlend::default(),
+        }
+    }
 }
 
 impl<'a> IntoIterator for &'a BarsSettings {

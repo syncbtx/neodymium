@@ -1,14 +1,11 @@
 use amane::{LayerWindow, Monitor, Service};
 use configuration::{
-    NEODYMIUM_USER_SETTINGS_PATH, engine::SettingsEngine, resolve::Resolve,
-    settings::GeneralSettings,
+    NEODYMIUM_USER_SETTINGS_PATH, engine::SettingsEngine, resolve::Resolve, settings::AppSettings,
 };
-use model::bar::Bars;
 
 #[derive(Debug)]
 pub struct ShellState {
-    pub bars: Bars,
-    pub general: GeneralSettings,
+    pub settings: AppSettings,
 }
 
 impl amane::Service for ShellState {
@@ -16,10 +13,7 @@ impl amane::Service for ShellState {
         let _ = SettingsEngine::init();
         let settings = SettingsEngine::load();
         // println!("{:#?}", settings);
-        let mut state = Self {
-            bars: settings.bars.resolve(),
-            general: settings.general,
-        };
+        let mut state = Self { settings };
         state.update();
         state
     }
@@ -32,8 +26,8 @@ impl amane::Service for ShellState {
             match SettingsEngine::reload() {
                 Ok(settings) => {
                     let mut state = ShellState::write();
-                    state.bars = settings.bars.resolve();
-                    state.general = settings.general;
+                    state.settings = settings;
+                    println!("reload successful")
                 }
                 Err(e) => {
                     eprintln!("reload failed");
@@ -46,29 +40,31 @@ impl amane::Service for ShellState {
 
 fn top_bar_view(monitor: &Monitor) -> LayerWindow {
     let state = ShellState::read();
-    ui::bar::view(&state.bars.top, monitor)
+    ui::bar::view(&state.settings.bars.top.resolve(), monitor)
 }
 
 fn right_bar_view(monitor: &Monitor) -> LayerWindow {
     let state = ShellState::read();
-    ui::bar::view(&state.bars.right, monitor)
+    ui::bar::view(&state.settings.bars.right.resolve(), monitor)
 }
 
 fn bottom_bar_view(monitor: &Monitor) -> LayerWindow {
     let state = ShellState::read();
-    ui::bar::view(&state.bars.bottom, monitor)
+    ui::bar::view(&state.settings.bars.bottom.resolve(), monitor)
 }
 
 fn left_bar_view(monitor: &Monitor) -> LayerWindow {
     let state = ShellState::read();
-    ui::bar::view(&state.bars.left, monitor)
+    ui::bar::view(&state.settings.bars.left.resolve(), monitor)
 }
 
 fn main() -> Result<(), String> {
     let _ = SettingsEngine::init();
-    let settings = SettingsEngine::load();
-    let general = settings.general;
-    let _ = settings.bars;
+
+    let general = {
+        let state = ShellState::read();
+        state.settings.general.clone()
+    };
 
     amane::App::new()
         .font(&general.font.path_or_name)
