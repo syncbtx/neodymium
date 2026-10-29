@@ -103,9 +103,21 @@ fn resolve_bounding_insets(mode: AttachmentMode, edge: model::Edge) -> BoundingI
     }
 }
 
+fn trim_padding(edge: model::Edge, padding: Padding) -> Padding {
+    let mut padding = padding;
+    match edge {
+        model::Edge::Top => padding.bottom = 0.0,
+        model::Edge::Right => padding.left = 0.0,
+        model::Edge::Bottom => padding.top = 0.0,
+        model::Edge::Left => padding.right = 0.0,
+    }
+    padding
+}
+
 pub fn view(bar: &Bar, monitor: &Monitor) -> LayerWindow {
     let (vertical, horizontal) = resolve_anchors(bar);
     let is_bar_horizontal = Bar::is_horizontal(bar.edge);
+    let is_attached = matches!(bar.attachment_mode, AttachmentMode::Attached { .. });
 
     let bar_fill = if bar.islands {
         Color::TRANSPARENT
@@ -152,12 +164,18 @@ pub fn view(bar: &Bar, monitor: &Monitor) -> LayerWindow {
     //         left: bar.padding.left as f32,
     //     }
     // };
-    //
-    let bar_padding = Padding {
+
+    let padding = Padding {
         top: bar.padding.top as f32,
         right: bar.padding.right as f32,
         bottom: bar.padding.bottom as f32,
         left: bar.padding.left as f32,
+    };
+
+    let bar_padding = if is_attached && bar.islands {
+        trim_padding(bar.edge, padding)
+    } else {
+        padding
     };
 
     if is_bar_horizontal {

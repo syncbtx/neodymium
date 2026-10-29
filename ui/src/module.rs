@@ -97,12 +97,6 @@ pub fn view(
         Module::FocusedWindowIcon => {
             let focused = services::FocusedWindow::read();
 
-            // let id = if focused.id == "null".to_string() {
-            //     "".to_string()
-            // } else {
-            //     focused.id.clone()
-            // };
-
             let inner = match focused.icon.clone() {
                 Some(icon_path) => Rectangle::new()
                     .width(thickness)
@@ -115,24 +109,9 @@ pub fn view(
             };
 
             if is_horizontal {
-                Box::new(
-                    inner, // Text::new(id)
-                          //     .font(&font.path_or_name)
-                          //     .size(font_size)
-                          //     .weight(font_weight)
-                          //     .color(resolve_color(colors.foreground))
-                          //     .max_lines(1)
-                          //     .elide(),
-                ) as Box<dyn Widget>
+                Box::new(inner) as Box<dyn Widget>
             } else {
-                Box::new(
-                    inner,
-                    // Text::new(id)
-                    //     .size(font_size)
-                    //     .weight(font_weight)
-                    //     .color(resolve_color(colors.foreground))
-                    //     .elide(),
-                ) as Box<dyn Widget>
+                Box::new(inner) as Box<dyn Widget>
             }
         }
         Module::Calendar {
