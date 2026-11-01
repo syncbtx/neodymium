@@ -1,10 +1,14 @@
 use amane::{
-    Align, Color, Column, Horizontal, InputArea, LayerWindow, Monitor, Padding, Rectangle, Row,
-    Size, Vertical, Widget, WindowSize,
+    Align, Color, Horizontal, InputArea, LayerWindow, Monitor, Padding, Rectangle, Size, Vertical,
+    WindowSize,
 };
 use model::{AttachmentMode, MainAxisSize, bar::Bar};
 
-use crate::{color::resolve_color, section};
+use crate::{
+    axis::{Axis, Flow},
+    color::resolve_color,
+    section,
+};
 
 fn resolve_layer(layer: model::Layer) -> amane::Layer {
     match layer {
@@ -74,6 +78,29 @@ struct BoundingInsets {
     right: f32,
 }
 
+impl BoundingInsets {
+    fn main(&self, axis: Axis) -> f32 {
+        match axis {
+            Axis::Horizontal => self.left + self.right,
+            Axis::Vertical => self.top + self.bottom,
+        }
+    }
+
+    fn cross(&self, axis: Axis) -> f32 {
+        match axis {
+            Axis::Horizontal => self.top + self.bottom,
+            Axis::Vertical => self.left + self.right,
+        }
+    }
+
+    fn cross_start(&self, axis: Axis) -> f32 {
+        match axis {
+            Axis::Horizontal => self.top,
+            Axis::Vertical => self.left,
+        }
+    }
+}
+
 fn resolve_bounding_insets(mode: AttachmentMode, edge: model::Edge) -> BoundingInsets {
     match mode {
         AttachmentMode::Floating { margin } => {
@@ -103,7 +130,7 @@ fn resolve_bounding_insets(mode: AttachmentMode, edge: model::Edge) -> BoundingI
     }
 }
 
-fn trim_padding(edge: model::Edge, padding: Padding) -> Padding {
+fn trim_inner_padding(edge: model::Edge, padding: Padding) -> Padding {
     let mut padding = padding;
     match edge {
         model::Edge::Top => padding.bottom = 0.0,
@@ -115,8 +142,8 @@ fn trim_padding(edge: model::Edge, padding: Padding) -> Padding {
 }
 
 pub fn view(bar: &Bar, monitor: &Monitor) -> LayerWindow {
+    let axis = Axis::of(bar.edge);
     let (vertical, horizontal) = resolve_anchors(bar);
-    let is_bar_horizontal = Bar::is_horizontal(bar.edge);
     let is_attached = matches!(bar.attachment_mode, AttachmentMode::Attached { .. });
 
     let bar_fill = if bar.islands {
@@ -140,31 +167,6 @@ pub fn view(bar: &Bar, monitor: &Monitor) -> LayerWindow {
     let insets = resolve_bounding_insets(bar.attachment_mode, bar.edge);
     let justify = resolve_justify(bar.sections_justify);
 
-    // let bar_padding = if bar.islands {
-    //     if is_bar_horizontal {
-    //         Padding {
-    //             top: 0.0,
-    //             right: bar.padding.right as f32,
-    //             bottom: 0.0,
-    //             left: bar.padding.left as f32,
-    //         }
-    //     } else {
-    //         Padding {
-    //             top: bar.padding.top as f32,
-    //             right: 0.0,
-    //             bottom: bar.padding.bottom as f32,
-    //             left: 0.0,
-    //         }
-    //     }
-    // } else {
-    //     Padding {
-    //         top: bar.padding.top as f32,
-    //         right: bar.padding.right as f32,
-    //         bottom: bar.padding.bottom as f32,
-    //         left: bar.padding.left as f32,
-    //     }
-    // };
-
     let padding = Padding {
         top: bar.padding.top as f32,
         right: bar.padding.right as f32,
@@ -173,226 +175,127 @@ pub fn view(bar: &Bar, monitor: &Monitor) -> LayerWindow {
     };
 
     let bar_padding = if is_attached && bar.islands {
-        trim_padding(bar.edge, padding)
+        trim_inner_padding(bar.edge, padding)
     } else {
         padding
     };
 
-    if is_bar_horizontal {
-        let bar_cross = bar.section_cross_axis_size as f32 + bar_padding.top + bar_padding.bottom;
-        let window_cross = bar_cross + insets.top + insets.bottom;
+    let bar_cross = bar.section_cross_axis_size as f32 + axis.cross_padding(bar_padding);
+    let window_cross = bar_cross + insets.cross(axis);
 
-        let mut row = Row::new(sections)
-            .gap(bar.spacing as f32)
-            .align(Align::Center)
-            .justify(justify)
-            .height(Size::Fixed(bar.section_cross_axis_size as f32));
+    let mut container = Flow::new(axis, sections)
+        .gap(bar.spacing as f32)
+        .align(Align::Center)
+        .justify(justify)
+        .cross_size(Size::Fixed(bar.section_cross_axis_size as f32));
 
-        let (window_main_axis, bar_main_axis, bar_main_px) = match bar.main_axis_size {
-            MainAxisSize::Auto => {
-                let measured = match Widget::width(&row) {
-                    Size::Fixed(w) => w,
-                    Size::Parent => monitor.width as f32,
-                };
-                let b_main = (measured + bar_padding.left + bar_padding.right)
-                    .min((monitor.width as f32 - insets.left - insets.right).max(0.0));
-                let w_main = b_main + insets.left + insets.right;
-                (WindowSize::Fixed(w_main), Size::Fixed(b_main), Some(b_main))
-            }
-            MainAxisSize::Percent(pct) if pct >= 100 => {
-                row = row.width(Size::Parent);
-                (WindowSize::Full, Size::Parent, None)
-            }
-            MainAxisSize::Percent(pct) => {
-                let b_main = (monitor.width as f32 * pct as f32 / 100.0)
-                    .min((monitor.width as f32 - insets.left - insets.right).max(0.0));
-                let w_main = (b_main + insets.left + insets.right).min(monitor.width as f32);
-                row = row.width(Size::Parent);
-                (WindowSize::Fixed(w_main), Size::Fixed(b_main), Some(b_main))
-            }
-            MainAxisSize::Pixels(px) => {
-                let b_main =
-                    (px as f32).min((monitor.width as f32 - insets.left - insets.right).max(0.0));
-                let w_main = b_main + insets.left + insets.right;
-                row = row.width(Size::Parent);
-                (WindowSize::Fixed(w_main), Size::Fixed(b_main), Some(b_main))
-            }
-        };
+    let monitor_main = axis.monitor_main(monitor);
+    let insets_main = insets.main(axis);
+    let bar_padding_main = axis.main_padding(bar_padding);
 
-        // A corner-anchored surface (Start/End) has no deducible exclusive edge, so the
-        // compositor drops the zone. Make the window span the whole edge instead, which
-        // anchors three edges, and position the bar inside it.
-        let spanning = bar.exclusive_zone && bar_main_px.is_some();
-        let window_main_axis = if spanning {
-            WindowSize::Full
-        } else {
-            window_main_axis
-        };
+    let (window_main_axis, bar_main_axis, bar_main_px) = match bar.main_axis_size {
+        MainAxisSize::Auto => {
+            let measured = match container.measured_main() {
+                Size::Fixed(w) => w,
+                Size::Parent => monitor_main,
+            };
+            let b_main = (measured + bar_padding_main).min((monitor_main - insets_main).max(0.0));
+            let w_main = b_main + insets_main;
+            (WindowSize::Fixed(w_main), Size::Fixed(b_main), Some(b_main))
+        }
+        MainAxisSize::Percent(pct) if pct >= 100 => {
+            container = container.main_size(Size::Parent);
+            (WindowSize::Full, Size::Parent, None)
+        }
+        MainAxisSize::Percent(pct) => {
+            let b_main =
+                (monitor_main * pct as f32 / 100.0).min((monitor_main - insets_main).max(0.0));
+            let w_main = (b_main + insets_main).min(monitor_main);
+            container = container.main_size(Size::Parent);
+            (WindowSize::Fixed(w_main), Size::Fixed(b_main), Some(b_main))
+        }
+        MainAxisSize::Pixels(px) => {
+            let b_main = (px as f32).min((monitor_main - insets_main).max(0.0));
+            let w_main = b_main + insets_main;
+            container = container.main_size(Size::Parent);
+            (WindowSize::Fixed(w_main), Size::Fixed(b_main), Some(b_main))
+        }
+    };
 
-        let envelope_width = match window_main_axis {
-            WindowSize::Full => Size::Parent,
-            WindowSize::Fixed(w) => Size::Fixed(w),
-        };
-
-        let main_align = if spanning {
-            resolve_main_align(bar.anchor)
-        } else {
-            Align::Center
-        };
-
-        let bar_rect = Rectangle::new()
-            .width(bar_main_axis)
-            .height(Size::Fixed(bar_cross))
-            .padding(bar_padding)
-            .align_child(Align::Center, Align::Center)
-            .fill(bar_fill)
-            .radius(bar.border_radius as f32)
-            .child(row);
-
-        let outer_envelope = Rectangle::new()
-            .width(envelope_width)
-            .height(Size::Fixed(window_cross))
-            .padding(Padding {
-                top: insets.top,
-                bottom: insets.bottom,
-                left: insets.left,
-                right: insets.right,
-            })
-            .align_child(main_align, Align::Center)
-            .fill(Color::TRANSPARENT)
-            .child(bar_rect);
-
-        // Only the bar itself takes the mouse; the transparent rest of the window doesn't.
-        let input_area = match (spanning, bar_main_px) {
-            (true, Some(len)) => Some(InputArea {
-                x: main_axis_offset(bar.anchor, monitor.width as f32, len) as i32,
-                y: insets.top as i32,
-                width: len as i32,
-                height: bar_cross as i32,
-            }),
-            _ => None,
-        };
-
-        let window = LayerWindow::new()
-            .width(window_main_axis)
-            .height(WindowSize::Fixed(window_cross))
-            .layer(resolve_layer(bar.layer))
-            .space(zone)
-            .visible(bar.enabled)
-            .anchor_horizontal(horizontal)
-            .anchor_vertical(vertical);
-
-        let window = match input_area {
-            Some(area) => window.input_region(vec![area]),
-            None => window,
-        };
-
-        window.child(outer_envelope)
+    let spanning = bar.exclusive_zone && bar_main_px.is_some();
+    let window_main_axis = if spanning {
+        WindowSize::Full
     } else {
-        let bar_cross = bar.section_cross_axis_size as f32 + bar_padding.left + bar_padding.right;
-        let window_cross = bar_cross + insets.left + insets.right;
+        window_main_axis
+    };
 
-        let mut column = Column::new(sections)
-            .gap(bar.spacing as f32)
-            .align(Align::Center)
-            .justify(justify)
-            .width(Size::Fixed(bar.section_cross_axis_size as f32));
+    let envelope_main = match window_main_axis {
+        WindowSize::Full => Size::Parent,
+        WindowSize::Fixed(w) => Size::Fixed(w),
+    };
 
-        let (window_main_axis, bar_main_axis, bar_main_px) = match bar.main_axis_size {
-            MainAxisSize::Auto => {
-                let measured = match Widget::height(&column) {
-                    Size::Fixed(h) => h,
-                    Size::Parent => monitor.height as f32,
-                };
-                let b_main = (measured + bar_padding.top + bar_padding.bottom)
-                    .min((monitor.height as f32 - insets.top - insets.bottom).max(0.0));
-                let w_main = b_main + insets.top + insets.bottom;
-                (WindowSize::Fixed(w_main), Size::Fixed(b_main), Some(b_main))
-            }
-            MainAxisSize::Percent(pct) if pct >= 100 => {
-                column = column.height(Size::Parent);
-                (WindowSize::Full, Size::Parent, None)
-            }
-            MainAxisSize::Percent(pct) => {
-                let b_main = (monitor.height as f32 * pct as f32 / 100.0)
-                    .min((monitor.height as f32 - insets.top - insets.bottom).max(0.0));
-                let w_main = (b_main + insets.top + insets.bottom).min(monitor.height as f32);
-                column = column.height(Size::Parent);
-                (WindowSize::Fixed(w_main), Size::Fixed(b_main), Some(b_main))
-            }
-            MainAxisSize::Pixels(px) => {
-                let b_main =
-                    (px as f32).min((monitor.height as f32 - insets.top - insets.bottom).max(0.0));
-                let w_main = b_main + insets.top + insets.bottom;
-                column = column.height(Size::Parent);
-                (WindowSize::Fixed(w_main), Size::Fixed(b_main), Some(b_main))
-            }
-        };
+    let main_align = if spanning {
+        resolve_main_align(bar.anchor)
+    } else {
+        Align::Center
+    };
 
-        let spanning = bar.exclusive_zone && bar_main_px.is_some();
-        let window_main_axis = if spanning {
-            WindowSize::Full
-        } else {
-            window_main_axis
-        };
+    let (bar_w, bar_h) = axis.size(bar_main_axis, Size::Fixed(bar_cross));
+    let bar_rect = Rectangle::new()
+        .width(bar_w)
+        .height(bar_h)
+        .padding(bar_padding)
+        .align_child(Align::Center, Align::Center)
+        .fill(bar_fill)
+        .radius(bar.border_radius as f32);
+    let bar_rect = container.attach_to(bar_rect);
 
-        let envelope_height = match window_main_axis {
-            WindowSize::Full => Size::Parent,
-            WindowSize::Fixed(h) => Size::Fixed(h),
-        };
+    let (env_w, env_h) = axis.size(envelope_main, Size::Fixed(window_cross));
+    let (env_align_h, env_align_v) = axis.point(main_align, Align::Center);
+    let outer_envelope = Rectangle::new()
+        .width(env_w)
+        .height(env_h)
+        .padding(Padding {
+            top: insets.top,
+            bottom: insets.bottom,
+            left: insets.left,
+            right: insets.right,
+        })
+        .align_child(env_align_h, env_align_v)
+        .fill(Color::TRANSPARENT)
+        .child(bar_rect);
 
-        let main_align = if spanning {
-            resolve_main_align(bar.anchor)
-        } else {
-            Align::Center
-        };
-
-        let bar_rect = Rectangle::new()
-            .width(Size::Fixed(bar_cross))
-            .height(bar_main_axis)
-            .padding(bar_padding)
-            .align_child(Align::Center, Align::Center)
-            .fill(bar_fill)
-            .radius(bar.border_radius as f32)
-            .child(column);
-
-        let outer_envelope = Rectangle::new()
-            .width(Size::Fixed(window_cross))
-            .height(envelope_height)
-            .padding(Padding {
-                top: insets.top,
-                bottom: insets.bottom,
-                left: insets.left,
-                right: insets.right,
+    let input_area = match (spanning, bar_main_px) {
+        (true, Some(len)) => {
+            let (x, y) = axis.point(
+                main_axis_offset(bar.anchor, monitor_main, len) as i32,
+                insets.cross_start(axis) as i32,
+            );
+            let (w, h) = axis.size(len as i32, bar_cross as i32);
+            Some(InputArea {
+                x,
+                y,
+                width: w,
+                height: h,
             })
-            .align_child(Align::Center, main_align)
-            .fill(Color::TRANSPARENT)
-            .child(bar_rect);
+        }
+        _ => None,
+    };
 
-        let input_area = match (spanning, bar_main_px) {
-            (true, Some(len)) => Some(InputArea {
-                x: insets.left as i32,
-                y: main_axis_offset(bar.anchor, monitor.height as f32, len) as i32,
-                width: bar_cross as i32,
-                height: len as i32,
-            }),
-            _ => None,
-        };
+    let (win_w, win_h) = axis.size(window_main_axis, WindowSize::Fixed(window_cross));
+    let window = LayerWindow::new()
+        .width(win_w)
+        .height(win_h)
+        .layer(resolve_layer(bar.layer))
+        .space(zone)
+        .visible(bar.enabled)
+        .anchor_horizontal(horizontal)
+        .anchor_vertical(vertical);
 
-        let window = LayerWindow::new()
-            .width(WindowSize::Fixed(window_cross))
-            .height(window_main_axis)
-            .layer(resolve_layer(bar.layer))
-            .space(zone)
-            .visible(bar.enabled)
-            .anchor_horizontal(horizontal)
-            .anchor_vertical(vertical);
+    let window = match input_area {
+        Some(area) => window.input_region(vec![area]),
+        None => window,
+    };
 
-        let window = match input_area {
-            Some(area) => window.input_region(vec![area]),
-            None => window,
-        };
-
-        window.child(outer_envelope)
-    }
+    window.child(outer_envelope)
 }

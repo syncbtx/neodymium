@@ -2,23 +2,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use amane::Service;
 
-const OFFSET_REFRESH: u32 = 1;
+pub const OFFSET_REFRESH: u32 = 1;
 
-const SECONDS_PER_DAY: i64 = 24 * 60 * 60;
-
-const WEEKDAYS: [&str; 7] = [
-    "Thursday",
-    "Friday",
-    "Saturday",
-    "Sunday",
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-];
-
-const MONTHS: [&str; 12] = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
+pub const SECONDS_PER_DAY: i64 = 24 * 60 * 60;
 
 /*
  * the config can't use chrono, so the utc offset comes from `date`
@@ -33,6 +19,22 @@ pub struct Clock {
 
     // seconds since 1970 in local time
     local: i64,
+}
+
+#[derive(Debug)]
+pub struct TimeParts {
+    pub hour: u8,
+    pub min: u8,
+    pub sec: u8,
+    pub am: bool,
+}
+
+#[derive(Debug)]
+pub struct DateParts {
+    pub weekday: usize,
+    pub day: usize,
+    pub month: usize,
+    pub year: u16,
 }
 
 impl Service for Clock {
@@ -70,46 +72,39 @@ impl Service for Clock {
 }
 
 impl Clock {
-    // like "09:05 PM", or "21:05" with the 24 hour setting, and "21:05:09" with seconds
-    pub fn time(&self, seconds: bool, format_24_hrs: bool) -> String {
+    pub fn time(&self) -> TimeParts {
         let today = self.local.rem_euclid(SECONDS_PER_DAY);
 
         let hours = today / 3600;
         let minutes = today % 3600 / 60;
+        let seconds = today % 60;
 
-        let shown = if seconds {
-            format!("{minutes:02}:{:02}", today % 60)
-        } else {
-            format!("{minutes:02}")
-        };
+        let am = if hours < 12 { true } else { false };
 
-        if format_24_hrs {
-            return format!("{hours:02}:{shown}");
+        TimeParts {
+            hour: hours as u8,
+            min: minutes as u8,
+            sec: seconds as u8,
+            am,
         }
-
-        let period = if hours < 12 { "AM" } else { "PM" };
-
-        // 0 and 12 both show as 12
-        let hours = match hours % 12 {
-            0 => 12,
-            hours => hours,
-        };
-
-        format!("{hours:02}:{shown} {period}")
     }
 
     // like "Tuesday, 29 Sep 2026"
-    pub fn date(&self) -> String {
+    pub fn date(&self) -> DateParts {
         let days = self.local.div_euclid(SECONDS_PER_DAY);
 
-        // 1970-01-01 was a thursday, the first entry
-        let weekday = WEEKDAYS[days.rem_euclid(7) as usize];
+        let weekday = days.rem_euclid(7) as usize;
 
         let (year, month, day) = civil_date(days);
 
-        let month = MONTHS[(month - 1) as usize];
+        let month = month - 1;
 
-        format!("{weekday}, {day:02} {month} {year}")
+        DateParts {
+            weekday,
+            day: day as usize,
+            month: month as usize,
+            year: year as u16,
+        }
     }
 
     // year, month from 1 and day from 1

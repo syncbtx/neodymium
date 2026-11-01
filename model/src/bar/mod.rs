@@ -83,7 +83,7 @@ impl Default for Bar {
                 bottom: 8,
                 left: 8,
             },
-            font: Some(Font::default()),
+            font: None,
             sections_justify: Justify::default(),
             sections: Vec::new(),
         }

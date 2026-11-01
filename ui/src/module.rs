@@ -1,60 +1,60 @@
-use amane::{Align, Center, Column, Rectangle, Row, Service, Text, Widget};
+use amane::{Align, Center, Column, Cpu, Media, Memory, Radius, Rectangle, Service, Text, Widget};
+use hex_color::HexColor;
+use hhmmss::Hhmmss;
 use model::{
     Font,
     bar::{module::Module, section::BarSectionColors},
 };
 
+pub const WEEKDAYS: [&str; 7] = [
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+];
+
+pub const WEEKDAYS_SHORT: [&str; 7] = ["Thur", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"];
+
+pub const MONTHS: [&str; 12] = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
 use crate::{
+    axis::{Axis, Flow},
     color::resolve_color,
-    services::{self},
+    component::progress,
+    services::{self, DateParts, TimeParts},
 };
 
 pub fn view(
     module: Module,
     thickness: f32,
-    is_horizontal: bool,
+    axis: Axis,
     radius: f32,
     colors: &BarSectionColors,
     font: &Font,
     font_size: f32,
     font_weight: u16,
 ) -> Box<dyn Widget> {
+    let font_size = font_size.min(thickness);
     match module {
         Module::Empty { main_axis_size } => {
-            if is_horizontal {
-                Box::new(
-                    Rectangle::new()
-                        .width(main_axis_size as f32)
-                        .height(thickness)
-                        .radius(radius)
-                        .fill(resolve_color(colors.module_background)),
-                ) as Box<dyn Widget>
-            } else {
-                Box::new(
-                    Rectangle::new()
-                        .width(thickness)
-                        .height(main_axis_size as f32)
-                        .radius(4.0)
-                        .fill(resolve_color(colors.module_background)),
-                ) as Box<dyn Widget>
-            }
+            let (w, h) = axis.size(main_axis_size as f32, thickness);
+            let r = axis.main(radius, 4.0);
+            Box::new(
+                Rectangle::new()
+                    .width(w)
+                    .height(h)
+                    .radius(r)
+                    .fill(resolve_color(colors.module_background)),
+            ) as Box<dyn Widget>
         }
         Module::Spacer(gap) => {
-            if is_horizontal {
-                Box::new(
-                    Rectangle::new()
-                        .width(gap as f32)
-                        .height(thickness)
-                        .radius(radius),
-                ) as Box<dyn Widget>
-            } else {
-                Box::new(
-                    Rectangle::new()
-                        .width(thickness)
-                        .height(gap as f32)
-                        .radius(radius),
-                ) as Box<dyn Widget>
-            }
+            let (w, h) = axis.size(gap as f32, thickness);
+            Box::new(Rectangle::new().width(w).height(h).radius(radius)) as Box<dyn Widget>
         }
         Module::Workspaces { .. } => {
             let workspaces = amane::Workspaces::read();
@@ -88,11 +88,10 @@ pub fn view(
                 })
                 .collect();
 
-            if is_horizontal {
-                Box::new(Row::new(pills).height(thickness).gap(4.0)) as Box<dyn Widget>
-            } else {
-                Box::new(Column::new(pills).width(thickness).gap(4.0)) as Box<dyn Widget>
-            }
+            Flow::new(axis, pills)
+                .cross_size(thickness)
+                .gap(4.0)
+                .into_widget()
         }
         Module::FocusedWindowIcon => {
             let focused = services::FocusedWindow::read();
@@ -108,11 +107,7 @@ pub fn view(
                     .fill(resolve_color(colors.module_foreground)),
             };
 
-            if is_horizontal {
-                Box::new(inner) as Box<dyn Widget>
-            } else {
-                Box::new(inner) as Box<dyn Widget>
-            }
+            Box::new(inner) as Box<dyn Widget>
         }
         Module::Calendar {
             time,
@@ -121,19 +116,26 @@ pub fn view(
             ..
         } => {
             let clock = services::Clock::read();
-            let out = if time && date {
-                format!("{} {}", clock.time(true, format_24_hrs), clock.date())
-            } else if time {
-                format!("{}", clock.time(true, format_24_hrs))
-            } else if date {
-                format!("{}", clock.date())
-            } else {
-                format!("{}", "")
-            };
 
-            if is_horizontal {
+            let mut sections = Vec::new();
+
+            if time {
+                sections.push(time_section(&clock.time(), !format_24_hrs));
+            }
+
+            if date {
+                sections.push(date_section(&clock.date()));
+            }
+
+            if axis.is_horizontal() {
+                let line = sections
+                    .iter()
+                    .map(TimeSection::line)
+                    .collect::<Vec<_>>()
+                    .join("  ");
+
                 Box::new(
-                    Text::new(&out)
+                    Text::new(&line.to_uppercase())
                         .size(font_size)
                         .weight(font_weight)
                         .font(&font.path_or_name)
@@ -141,48 +143,225 @@ pub fn view(
                         .max_lines(1),
                 ) as Box<dyn Widget>
             } else {
-                Box::new(
-                    Text::new(&out)
-                        .font(&font.path_or_name)
-                        .size(font_size)
-                        .weight(font_weight)
-                        .color(resolve_color(colors.foreground))
-                        .elide(),
-                ) as Box<dyn Widget>
+                let rows = sections
+                    .into_iter()
+                    .flat_map(TimeSection::stacked)
+                    .map(|row| {
+                        Box::new(
+                            Text::new(&row.to_uppercase())
+                                .font(&font.path_or_name)
+                                .size(font_size)
+                                .weight(font_weight)
+                                .color(resolve_color(colors.foreground)),
+                        ) as Box<dyn Widget>
+                    })
+                    .collect();
+
+                Box::new(Column::new(rows).align(Center)) as Box<dyn Widget>
             }
         }
+
         Module::Divider => {
             let girth = 1.0f32;
             let length = thickness * 0.8;
-
             let fill = resolve_color(colors.module_background);
-
-            let rect = if is_horizontal {
-                Box::new(Rectangle::new().width(girth).height(length).fill(fill)) as Box<dyn Widget>
-            } else {
-                Box::new(Rectangle::new().width(length).height(girth).fill(fill)) as Box<dyn Widget>
-            };
-            rect
+            let (w, h) = axis.size(girth, length);
+            Box::new(Rectangle::new().width(w).height(h).fill(fill)) as Box<dyn Widget>
         }
         Module::Ring => {
             let inner = thickness - 1.5f32;
-            let radius = 9999.0f32;
             Box::new(
                 Rectangle::new()
                     .width(thickness)
                     .height(thickness)
-                    .radius(radius)
+                    .radius(Radius::Full)
                     .align_child(Center, Center)
                     .fill(resolve_color(colors.module_background))
                     .child(
                         Rectangle::new()
                             .width(inner)
                             .height(inner)
-                            .radius(radius)
+                            .radius(Radius::Full)
                             .align_child(Center, Center)
                             .fill(resolve_color(colors.background)),
-                    ),
+                    )
+                    .on_hover(|hovered| if hovered {}),
             ) as Box<dyn Widget>
         }
+        Module::Media => {
+            let media = Media::read();
+
+            match media.active() {
+                Some(player) => {
+                    let info = if player.playing() {
+                        format!(
+                            "{} / {}",
+                            player.position().hhmmss(),
+                            player.length().hhmmss()
+                        )
+                    } else {
+                        "Nothing is playing".to_string()
+                    };
+                    Box::new(
+                        Text::new(&info)
+                            .font(&font.path_or_name)
+                            .size(font_size)
+                            .weight(font_weight)
+                            .color(resolve_color(colors.foreground)),
+                    ) as Box<dyn Widget>
+                }
+                None => Box::new(
+                    Text::new("Nothing is playing")
+                        .font(&font.path_or_name)
+                        .size(font_size)
+                        .weight(font_weight)
+                        .color(resolve_color(colors.foreground)),
+                ) as Box<dyn Widget>,
+            }
+        }
+        Module::SystemModuleCapsule { label, module, .. } => {
+            let color = |ratio: f32| -> HexColor {
+                if ratio > 0.8 {
+                    HexColor::RED
+                } else if ratio > 0.5 {
+                    HexColor::YELLOW
+                } else {
+                    HexColor::GREEN
+                }
+            };
+            let (bar, pct) = match module {
+                model::bar::module::SystemModule::Cpu => {
+                    let pct = Cpu::read().percent();
+                    let ratio = pct as f32 / 100.0;
+
+                    (
+                        progress::view(
+                            axis.is_horizontal(),
+                            ratio,
+                            progress::ProgressStyle::Bar,
+                            32.0,
+                            2.0,
+                            radius,
+                            resolve_color(colors.module_background),
+                            resolve_color(color(ratio)),
+                        ),
+                        Some(pct),
+                    )
+                }
+                model::bar::module::SystemModule::Ram => {
+                    let pct = Memory::read().percent();
+                    let ratio = pct as f32 / 100.0;
+                    (
+                        progress::view(
+                            axis.is_horizontal(),
+                            ratio,
+                            progress::ProgressStyle::Bar,
+                            32.0,
+                            2.0,
+                            radius,
+                            resolve_color(colors.module_background),
+                            resolve_color(color(ratio)),
+                        ),
+                        Some(pct),
+                    )
+                }
+                model::bar::module::SystemModule::Disk => todo!(),
+                model::bar::module::SystemModule::Temp => todo!(),
+            };
+
+            if label {
+                let label = Box::new(
+                    Text::new(module.label())
+                        .font(&font.path_or_name)
+                        .size(font_size)
+                        .weight(500)
+                        .color(resolve_color(colors.foreground)),
+                ) as Box<dyn Widget>;
+
+                let gap = 4.0;
+
+                let children = match pct {
+                    Some(pct) => vec![
+                        label,
+                        bar,
+                        Box::new(
+                            Text::new(format!("{}%", pct))
+                                .font(&font.path_or_name)
+                                .size(font_size)
+                                .weight(500)
+                                .color(resolve_color(colors.foreground)),
+                        ) as Box<dyn Widget>,
+                    ],
+                    None => vec![label, bar],
+                };
+
+                Flow::new(axis, children)
+                    .gap(gap)
+                    .align(Align::Center)
+                    .into_widget()
+            } else {
+                bar
+            }
+        }
+    }
+}
+
+struct TimeSection {
+    fields: Vec<String>,
+    sep: &'static str,
+    suffix: Option<&'static str>,
+}
+
+impl TimeSection {
+    fn line(&self) -> String {
+        let mut line = self.fields.join(self.sep);
+
+        if let Some(suffix) = self.suffix {
+            line.push(' ');
+            line.push_str(suffix);
+        }
+
+        line
+    }
+
+    fn stacked(self) -> Vec<String> {
+        let mut rows = self.fields;
+        rows.extend(self.suffix.map(String::from));
+        rows
+    }
+}
+
+fn time_section(time: &TimeParts, twelve_hour: bool) -> TimeSection {
+    let (hour, suffix) = if twelve_hour {
+        let hour = match time.hour % 12 {
+            0 => 12,
+            hour => hour,
+        };
+
+        (
+            format!("{:02}", hour),
+            Some(if time.am { "AM" } else { "PM" }),
+        )
+    } else {
+        (format!("{:02}", time.hour), None)
+    };
+
+    TimeSection {
+        fields: vec![hour, format!("{:02}", time.min), format!("{:02}", time.sec)],
+        sep: ":",
+        suffix,
+    }
+}
+
+fn date_section(date: &DateParts) -> TimeSection {
+    TimeSection {
+        fields: vec![
+            WEEKDAYS_SHORT[date.weekday].to_string(),
+            date.day.to_string(),
+            MONTHS[date.month].to_string(),
+            date.year.to_string(),
+        ],
+        sep: " ",
+        suffix: None,
     }
 }

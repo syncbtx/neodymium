@@ -1,5 +1,7 @@
+pub mod bar;
 pub mod bars;
 pub mod general;
+pub mod section;
 
 pub use bars::*;
 pub use general::*;
@@ -28,6 +30,12 @@ impl Sanitize for AppSettings {
         for bar in self.bars.iter_mut() {
             if bar.font.is_none() {
                 bar.font = Some(self.general.font.clone());
+            }
+
+            for section in &mut bar.sections {
+                if section.font.is_none() {
+                    section.font = bar.font.clone();
+                }
             }
         }
     }

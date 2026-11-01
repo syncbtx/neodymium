@@ -1,14 +1,17 @@
 [package]
-name = "shell"
+name = "neodymium"
 version = "0.1.0"
 edition = "2024"
 
-[[bin]]
-name = "shell"
-path = '/home/syncbtx/Linux/neodymium/shell/src/main.rs'
-
 [dependencies]
-configuration = {path = "../configuration"}
-model = {path = "../model"}
-ui = {path = "../ui"}
-amane = {git = "https://github.com/MystiaFin/amane.git", tag="v.0.1.2-experimental"}
+configuration = { path = "../configuration" }
+model = { path = "../model" }
+ui = { path = "../ui" }
+amane = { git = "https://github.com/MystiaFin/amane.git", tag = "v.0.1.2-experimental" }
+
+# [profile.release]
+# opt-level = 3
+# lto = "fat"
+# codegen-units = 8
+# strip = "symbols"
+# debug = false

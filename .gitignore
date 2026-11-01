@@ -8,6 +8,7 @@
 *.swp
 *.swo
 *~
+*.md
 
 # OS artifacts
 .DS_Store

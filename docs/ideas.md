@@ -10,5 +10,7 @@
   - allow swapping bars with the same orientation
   - allow reversing bar section order
   - allow users to save their settings as presets and load them at anytime with validation
+  - theme system, mainly colour
+  - scheduled system update
   
 -

@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+use fontconfig::{Fontconfig, ObjectSet, Pattern, list_fonts, FC_FAMILY};
 use schemars::schema_for;
 use serde_json::{Map, Value};
 
@@ -18,6 +20,31 @@ impl SettingsEngine {
         Self::export_schema()
     }
 
+    pub fn list_system_fonts() -> Vec<String> {
+        let mut families = BTreeSet::new();
+
+        if let Some(fc) = Fontconfig::new() {
+            if let Ok(pattern) = Pattern::new(&fc) {
+                let mut os = ObjectSet::new(&fc).ok();
+                if let Some(ref mut os) = os {
+                    let _ = os.add(FC_FAMILY);
+                }
+                if let Ok(fontset) = list_fonts(&pattern, os.as_ref()) {
+                    for pat in fontset.iter() {
+                        if let Ok(family) = pat.get_string(FC_FAMILY) {
+                            let trimmed = family.trim();
+                            if !trimmed.is_empty() {
+                                families.insert(trimmed.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        families.into_iter().collect()
+    }
+
     pub fn export_schema() -> Result<(), String> {
         let mut schema =
             serde_json::to_value(schema_for!(AppSettings)).map_err(|e| e.to_string())?;
@@ -30,6 +57,24 @@ impl SettingsEngine {
                     "description": "Path or URL to the schema file for editor validation."
                 }),
             );
+        }
+
+        let fonts = Self::list_system_fonts();
+        if !fonts.is_empty() {
+            if let Some(font_prop) = schema.pointer_mut("/$defs/Font/properties/pathOrName") {
+                *font_prop = serde_json::json!({
+                    "anyOf": [
+                        {
+                            "type": "string",
+                            "enum": fonts
+                        },
+                        {
+                            "type": "string",
+                            "pattern": r"^(/|~|\./|sans-serif|monospace|serif).*"
+                        }
+                    ]
+                });
+            }
         }
 
         let pretty = serde_json::to_string_pretty(&schema).map_err(|e| e.to_string())?;
@@ -51,13 +96,13 @@ impl SettingsEngine {
                     Ok(overlay) => {
                         Self::merge(&mut base, &overlay);
                     }
-                    Err(e) => println!("PARSE ERR: {}", e),
+                    Err(e) => println!("PARSE ERR: {:#?}", e),
                 },
-                Err(e) => println!("READ ERR: {}", e),
+                Err(e) => println!("READ ERR: {:#?}", e),
             }
         } else {
             println!(
-                "DEFAULT PATH DOES NOT EXIST: {}",
+                "DEFAULT PATH DOES NOT EXIST: {:#?}",
                 NEODYMIUM_DEFAULT_SETTINGS_PATH.display()
             );
         }
@@ -130,3 +175,83 @@ impl SettingsEngine {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::settings::section::SectionSettings;
+
+    #[test]
+    fn test_export_schema() {
+        SettingsEngine::init().unwrap();
+        let contents = std::fs::read_to_string(&*NEODYMIUM_SCHEMA_PATH).unwrap();
+        let schema: serde_json::Value = serde_json::from_str(&contents).unwrap();
+        let enum_values = schema
+            .pointer("/$defs/Font/properties/pathOrName/anyOf/0/enum")
+            .and_then(|v| v.as_array())
+            .unwrap();
+        assert!(!enum_values.is_empty());
+    }
+
+    #[test]
+    fn test_font_fallback_hierarchy() {
+        use model::Font;
+        let mut settings = AppSettings::default();
+        settings.general.font.path_or_name = "GeneralFont".to_string();
+
+        settings.bars.top.font = None;
+        settings.bars.top.sections = vec![SectionSettings::default()];
+
+        settings.bars.bottom.font = Some(Font {
+            path_or_name: "BarFont".to_string(),
+            ..Default::default()
+        });
+        settings.bars.bottom.sections = vec![
+            SectionSettings::default(),
+            SectionSettings {
+                font: Some(Font {
+                    path_or_name: "SectionFont".to_string(),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        ];
+
+        settings.sanitize();
+
+        assert_eq!(
+            settings.bars.top.font.as_ref().unwrap().path_or_name,
+            "GeneralFont"
+        );
+        assert_eq!(
+            settings.bars.top.sections[0]
+                .font
+                .as_ref()
+                .unwrap()
+                .path_or_name,
+            "GeneralFont"
+        );
+
+        assert_eq!(
+            settings.bars.bottom.font.as_ref().unwrap().path_or_name,
+            "BarFont"
+        );
+        assert_eq!(
+            settings.bars.bottom.sections[0]
+                .font
+                .as_ref()
+                .unwrap()
+                .path_or_name,
+            "BarFont"
+        );
+        assert_eq!(
+            settings.bars.bottom.sections[1]
+                .font
+                .as_ref()
+                .unwrap()
+                .path_or_name,
+            "SectionFont"
+        );
+    }
+}
+

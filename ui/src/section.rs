@@ -1,11 +1,19 @@
-use amane::{Align, Column, Justify, Padding, Row, Size, Widget};
+use amane::{Align, Justify, Padding, Size, Widget};
 use model::bar::{Bar, section::BarSection};
 
-use crate::{card, color::resolve_color, module};
+use crate::{
+    axis::{Axis, Flow},
+    color::resolve_color,
+    module,
+};
 
 pub fn view(section: &BarSection, parent: &Bar) -> Box<dyn Widget> {
-    let is_bar_horizontal = Bar::is_horizontal(parent.edge);
-    let font = parent.font.clone().unwrap_or_default();
+    let axis = Axis::of(parent.edge);
+    let font = section
+        .font
+        .clone()
+        .or_else(|| parent.font.clone())
+        .unwrap_or_default();
     let cross_size = parent.section_cross_axis_size as f32;
 
     let padding = Padding {
@@ -15,13 +23,8 @@ pub fn view(section: &BarSection, parent: &Bar) -> Box<dyn Widget> {
         left: section.padding.left as f32,
     };
 
-    let (inner_cross, module_thickness) = if is_bar_horizontal {
-        let t = (cross_size - padding.top - padding.bottom).max(16.0);
-        (Size::Fixed(t), t)
-    } else {
-        let t = (cross_size - padding.left - padding.right).max(16.0);
-        (Size::Fixed(t), t)
-    };
+    let module_thickness = (cross_size - axis.cross_padding(padding)).max(16.0);
+    let inner_cross = Size::Fixed(module_thickness);
 
     let module_views = section
         .modules
@@ -30,11 +33,11 @@ pub fn view(section: &BarSection, parent: &Bar) -> Box<dyn Widget> {
             module::view(
                 *m,
                 module_thickness,
-                is_bar_horizontal,
+                axis,
                 section.border_radius.unwrap_or_default() as f32,
                 &section.colors,
                 &font,
-                10.0,
+                9.0,
                 700,
             )
         })
@@ -42,31 +45,21 @@ pub fn view(section: &BarSection, parent: &Bar) -> Box<dyn Widget> {
 
     let gap = section.spacing as f32;
 
-    if is_bar_horizontal {
-        let inner = Row::new(module_views)
+    let radius = match section.border_radius {
+        Some(r) => r as f32,
+        None => parent.section_border_radius as f32,
+    };
+
+    Box::new(
+        Flow::new(axis, module_views)
             .gap(gap)
             .align(Align::Center)
             .justify(Justify::Center)
-            .height(inner_cross);
-
-        Box::new(card::view(
-            inner,
-            padding,
-            section.border_radius.unwrap_or_default() as f32,
-            Some(resolve_color(section.colors.background)),
-        ))
-    } else {
-        let inner = Column::new(module_views)
-            .gap(gap)
-            .align(Align::Center)
-            .justify(Justify::Center)
-            .width(inner_cross);
-
-        Box::new(card::view(
-            inner,
-            padding,
-            section.border_radius.unwrap_or_default() as f32,
-            Some(resolve_color(section.colors.background)),
-        ))
-    }
+            .cross_size(inner_cross)
+            .into_card(
+                padding,
+                radius,
+                Some(resolve_color(section.colors.background)),
+            ),
+    )
 }
