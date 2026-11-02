@@ -2219,6 +2219,7 @@ name = "ui"
 version = "0.1.0"
 dependencies = [
  "amane",
+ "configuration",
  "hex_color",
  "hhmmss",
  "model",

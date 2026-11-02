@@ -85,5 +85,9 @@ impl Sanitize for BarsSettings {
         self.right.edge = Edge::Right;
         self.bottom.edge = Edge::Bottom;
         self.left.edge = Edge::Left;
+
+        for bar in self.iter_mut() {
+            bar.sanitize();
+        }
     }
 }

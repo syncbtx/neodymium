@@ -4,7 +4,11 @@ use hex_color::HexColor;
 use model::{
     Alpha, Anchor, AttachmentMode, Backdrop, Border, Edge, Font, Insets, Justify, Layer,
     MainAxisSize,
-    bar::{Bar, module::Module, section::BarSectionColors},
+    bar::{
+        Bar,
+        module::Module,
+        section::{BarSectionColors, SectionTint},
+    },
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -64,6 +68,7 @@ impl Default for BarSettings {
             section_padding: Insets::all(8),
             sections: vec![
                 SectionSettings {
+                    tint: SectionTint::default(),
                     background: None,
                     foreground: None,
                     contrast: true,
@@ -79,6 +84,7 @@ impl Default for BarSettings {
                     }],
                 },
                 SectionSettings {
+                    tint: SectionTint::default(),
                     background: None,
                     foreground: None,
                     contrast: true,
@@ -97,6 +103,7 @@ impl Default for BarSettings {
                     }],
                 },
                 SectionSettings {
+                    tint: SectionTint::default(),
                     background: None,
                     foreground: None,
                     contrast: true,

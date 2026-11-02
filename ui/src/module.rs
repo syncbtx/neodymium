@@ -40,6 +40,9 @@ pub fn view(
     font_weight: u16,
 ) -> Box<dyn Widget> {
     let font_size = font_size.min(thickness);
+    let theme = services::Theme::read();
+    let palette = theme.active();
+
     match module {
         Module::Empty { main_axis_size } => {
             let (w, h) = axis.size(main_axis_size as f32, thickness);
@@ -65,9 +68,9 @@ pub fn view(
                 .filter(|ws| ws.windows() > 0 || (ws.windows() == 0 && ws.focused()))
                 .map(|ws| {
                     let (background, foreground) = if ws.active() {
-                        (colors.module_background, colors.module_foreground)
+                        (palette.primary, palette.on_primary)
                     } else {
-                        (colors.module_foreground, colors.module_background)
+                        (colors.module_background, colors.module_foreground)
                     };
 
                     Box::new(
@@ -164,7 +167,7 @@ pub fn view(
         Module::Divider => {
             let girth = 1.0f32;
             let length = thickness * 0.8;
-            let fill = resolve_color(colors.module_background);
+            let fill = resolve_color(palette.outline_variant);
             let (w, h) = axis.size(girth, length);
             Box::new(Rectangle::new().width(w).height(h).fill(fill)) as Box<dyn Widget>
         }
@@ -176,7 +179,7 @@ pub fn view(
                     .height(thickness)
                     .radius(Radius::Full)
                     .align_child(Center, Center)
-                    .fill(resolve_color(colors.module_background))
+                    .fill(resolve_color(palette.outline_variant))
                     .child(
                         Rectangle::new()
                             .width(inner)
@@ -221,12 +224,12 @@ pub fn view(
         }
         Module::SystemModuleCapsule { label, module, .. } => {
             let color = |ratio: f32| -> HexColor {
-                if ratio > 0.8 {
-                    HexColor::RED
-                } else if ratio > 0.5 {
-                    HexColor::YELLOW
+                if ratio > 0.85 {
+                    palette.error
+                } else if ratio > 0.70 {
+                    palette.tertiary
                 } else {
-                    HexColor::GREEN
+                    palette.primary
                 }
             };
             let (bar, pct) = match module {
@@ -242,7 +245,7 @@ pub fn view(
                             32.0,
                             2.0,
                             radius,
-                            resolve_color(colors.module_background),
+                            resolve_color(palette.surface_container_highest),
                             resolve_color(color(ratio)),
                         ),
                         Some(pct),
@@ -259,7 +262,7 @@ pub fn view(
                             32.0,
                             2.0,
                             radius,
-                            resolve_color(colors.module_background),
+                            resolve_color(palette.surface_container_highest),
                             resolve_color(color(ratio)),
                         ),
                         Some(pct),

@@ -1,12 +1,12 @@
 use amane::{
-    Align, Color, Horizontal, InputArea, LayerWindow, Monitor, Padding, Rectangle, Size, Vertical,
-    WindowSize,
+    Align, Color, Horizontal, InputArea, LayerWindow, Monitor, Padding, Rectangle, Service, Size,
+    Vertical, WindowSize,
 };
 use model::{AttachmentMode, MainAxisSize, bar::Bar};
 
 use crate::{
     axis::{Axis, Flow},
-    color::resolve_color,
+    color::resolve_color_with_alpha,
     section,
 };
 
@@ -149,7 +149,8 @@ pub fn view(bar: &Bar, monitor: &Monitor) -> LayerWindow {
     let bar_fill = if bar.islands {
         Color::TRANSPARENT
     } else {
-        resolve_color(bar.background)
+        let theme = crate::services::Theme::read();
+        resolve_color_with_alpha(theme.active().surface, theme.opacity())
     };
 
     let sections = bar

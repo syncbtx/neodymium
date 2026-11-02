@@ -17,6 +17,18 @@ pub static NEODYMIUM_DEFAULT_SETTINGS_PATH: LazyLock<PathBuf> =
 pub static NEODYMIUM_SCHEMA_PATH: LazyLock<PathBuf> =
     LazyLock::new(|| NEODYMIUM_STATE_DIR.join("schema.json"));
 
+pub static NEODYMIUM_ACTIVE_WALLPAPER: LazyLock<PathBuf> =
+    LazyLock::new(|| NEODYMIUM_STATE_DIR.join("wallpaper"));
+
+pub static SERPANTINUM_WALLPAPER: LazyLock<PathBuf> = LazyLock::new(|| {
+    match env::var_os("XDG_CACHE_HOME") {
+        Some(path) => PathBuf::from(path).join("serpantinum/wallpaper/current_wallpaper.png"),
+        None => env::home_dir()
+            .expect(HOME_UNSET_ERR_MESSAGE)
+            .join(".cache/serpantinum/wallpaper/current_wallpaper.png"),
+    }
+});
+
 pub fn config_dir() -> PathBuf {
     match env::var_os("XDG_CONFIG_HOME") {
         Some(path) => PathBuf::from(path).join("neodymium"),

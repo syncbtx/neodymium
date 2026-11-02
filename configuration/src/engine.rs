@@ -195,26 +195,29 @@ mod tests {
 
     #[test]
     fn test_font_fallback_hierarchy() {
-        use model::Font;
+        use model::{Font, bar::module::Module};
         let mut settings = AppSettings::default();
         settings.general.font.path_or_name = "GeneralFont".to_string();
 
+        let dummy_section = |font: Option<Font>| SectionSettings {
+            font,
+            modules: vec![Module::Divider],
+            ..Default::default()
+        };
+
         settings.bars.top.font = None;
-        settings.bars.top.sections = vec![SectionSettings::default()];
+        settings.bars.top.sections = vec![dummy_section(None)];
 
         settings.bars.bottom.font = Some(Font {
             path_or_name: "BarFont".to_string(),
             ..Default::default()
         });
         settings.bars.bottom.sections = vec![
-            SectionSettings::default(),
-            SectionSettings {
-                font: Some(Font {
-                    path_or_name: "SectionFont".to_string(),
-                    ..Default::default()
-                }),
+            dummy_section(None),
+            dummy_section(Some(Font {
+                path_or_name: "SectionFont".to_string(),
                 ..Default::default()
-            },
+            })),
         ];
 
         settings.sanitize();

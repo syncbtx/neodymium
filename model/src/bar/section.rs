@@ -4,6 +4,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Border, Font, Insets, bar::module::Module};
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum SectionTint {
+    #[default]
+    Surface,
+    Primary,
+    Secondary,
+    Tertiary,
+    Error,
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
 pub struct BarSectionColors {
@@ -26,6 +37,7 @@ impl Default for BarSectionColors {
 
 #[derive(Debug)]
 pub struct BarSection {
+    pub tint: SectionTint,
     pub background: Option<HexColor>,
     pub foreground: Option<HexColor>,
     pub contrast: bool,

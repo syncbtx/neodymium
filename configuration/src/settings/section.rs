@@ -3,7 +3,7 @@ use model::{
     Border, Font, Insets,
     bar::{
         module::Module,
-        section::{BarSection, BarSectionColors},
+        section::{BarSection, BarSectionColors, SectionTint},
     },
 };
 use schemars::JsonSchema;
@@ -14,6 +14,7 @@ use crate::resolve::Resolve;
 #[derive(Debug, Serialize, Clone, Default, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
 pub struct SectionSettings {
+    pub tint: SectionTint,
     pub background: Option<HexColor>,
     pub foreground: Option<HexColor>, // hex | "contrast"
     pub contrast: bool,               // hex | "contrast"
@@ -32,6 +33,7 @@ impl Resolve for SectionSettings {
 
     fn resolve(&self) -> Self::Output {
         BarSection {
+            tint: self.tint,
             background: self.background,
             foreground: self.foreground,
             contrast: self.contrast,

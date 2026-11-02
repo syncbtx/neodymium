@@ -1,7 +1,19 @@
 use amane::{LayerWindow, Monitor, Service};
 use configuration::{
-    NEODYMIUM_USER_SETTINGS_PATH, engine::SettingsEngine, resolve::Resolve, settings::AppSettings,
+    NEODYMIUM_ACTIVE_WALLPAPER, NEODYMIUM_USER_SETTINGS_PATH, SERPANTINUM_WALLPAPER,
+    engine::SettingsEngine, resolve::Resolve, settings::AppSettings,
 };
+use std::path::Path;
+
+fn resolve_active_wallpaper() -> Option<&'static Path> {
+    if NEODYMIUM_ACTIVE_WALLPAPER.exists() {
+        Some(NEODYMIUM_ACTIVE_WALLPAPER.as_path())
+    } else if SERPANTINUM_WALLPAPER.exists() {
+        Some(SERPANTINUM_WALLPAPER.as_path())
+    } else {
+        None
+    }
+}
 
 #[derive(Debug)]
 pub struct ShellState {
@@ -12,6 +24,8 @@ impl amane::Service for ShellState {
     fn new() -> Self {
         let _ = SettingsEngine::init();
         let settings = SettingsEngine::load();
+        let wp_path = resolve_active_wallpaper();
+        ui::services::Theme::write().apply(&settings.theme, wp_path);
         Self { settings }
     }
 
@@ -22,6 +36,8 @@ impl amane::Service for ShellState {
         for _ in amane::watch_file(&path) {
             match SettingsEngine::reload() {
                 Ok(settings) => {
+                    let wp_path = resolve_active_wallpaper();
+                    ui::services::Theme::write().apply(&settings.theme, wp_path);
                     ShellState::write().settings = settings;
                     println!("reload successful");
                 }
