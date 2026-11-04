@@ -6,20 +6,20 @@ use configuration::settings::theme::{
     WallpaperTheme,
 };
 use hex_color::HexColor;
-use model::palette::{Palette, Theme as PaletteTheme};
+use model::palette::{Palette, Theme as ModelTheme};
 
 #[derive(Debug, Clone)]
 pub struct ThemeStore {
-    pub wallpaper: PaletteTheme,
-    pub seed_color: PaletteTheme,
-    pub pre_configured: PaletteTheme,
+    pub wallpaper: ModelTheme,
+    pub seed_color: ModelTheme,
+    pub pre_configured: ModelTheme,
 }
 
 impl Default for ThemeStore {
     fn default() -> Self {
         Self {
-            wallpaper: PaletteTheme::default(),
-            seed_color: PaletteTheme::default(),
+            wallpaper: ModelTheme::default(),
+            seed_color: ModelTheme::default(),
             pre_configured: pre_configured_theme(PreConfiguredTheme::Catppuccin),
         }
     }
@@ -68,10 +68,6 @@ impl Theme {
         self.opacity
     }
 
-    pub fn base_opacity(&self) -> f32 {
-        self.opacity as f32 / 255.0
-    }
-
     pub fn toggle(&mut self) {
         self.mode = match self.mode {
             ColorScheme::Dark => ColorScheme::Light,
@@ -79,37 +75,28 @@ impl Theme {
         };
     }
 
-    pub fn apply(&mut self, settings: &ThemeSetting, wallpaper_path: Option<&Path>) {
+    /// Apply cheap/fast metadata fields only. Never call this while holding
+    /// the write lock alongside a slow computation.
+    pub fn set_meta(&mut self, settings: &ThemeSetting) {
         self.mode = settings.mode;
         self.active_source = settings.active;
-        self.opacity = settings.active_opacity();
+        self.opacity = settings.active_opacity().0;
+    }
 
-        self.store.pre_configured = pre_configured_theme(settings.pre_configured);
+    pub fn set_pre_configured(&mut self, palette: ModelTheme) {
+        self.store.pre_configured = palette;
+    }
 
-        if let Some(generated_seed) = generate_from_seed(&settings.seed_color) {
-            self.store.seed_color = generated_seed;
-        }
+    pub fn set_seed_color(&mut self, palette: ModelTheme) {
+        self.store.seed_color = palette;
+    }
 
-        let wp_to_use = wallpaper_path
-            .filter(|p| p.exists())
-            .or_else(|| {
-                let serp = configuration::SERPANTINUM_WALLPAPER.as_path();
-                if serp.exists() {
-                    Some(serp)
-                } else {
-                    None
-                }
-            });
-
-        if let Some(path) = wp_to_use {
-            if let Some(generated_wp) = generate_from_wallpaper(path, &settings.wallpaper) {
-                self.store.wallpaper = generated_wp;
-            }
-        }
+    pub fn set_wallpaper(&mut self, palette: ModelTheme) {
+        self.store.wallpaper = palette;
     }
 }
 
-pub fn generate_from_seed(settings: &SeedColorTheme) -> Option<PaletteTheme> {
+pub fn generate_from_seed(settings: &SeedColorTheme) -> Option<ModelTheme> {
     let hex_str = format!(
         "#{:02x}{:02x}{:02x}",
         settings.seed_color.r, settings.seed_color.g, settings.seed_color.b
@@ -131,50 +118,55 @@ pub fn generate_from_seed(settings: &SeedColorTheme) -> Option<PaletteTheme> {
     parse_matugen_output(&stdout)
 }
 
-pub fn generate_from_wallpaper(
-    path: &Path,
-    settings: &WallpaperTheme,
-) -> Option<PaletteTheme> {
-    let path_str = path.to_string_lossy();
-    let mut cmd = format!(
-        "matugen image '{path_str}' -j hex --dry-run -q --type {} --contrast {}",
-        settings.scheme_type.as_str(),
-        settings.contrast
-    );
+pub fn generate_from_wallpaper(path: &Path, settings: &WallpaperTheme) -> Option<ModelTheme> {
+    let run_cmd = |index_override: Option<usize>| -> Option<ModelTheme> {
+        let path_str = path.to_string_lossy();
+        let mut cmd = format!(
+            "matugen image '{path_str}' -j hex --dry-run -q --type {} --contrast {}",
+            settings.scheme_type.as_str(),
+            settings.contrast
+        );
 
-    if let Some(idx) = settings.index {
-        cmd.push_str(&format!(" --source-color-index {idx}"));
-        if let Some(prefer) = settings.prefer {
+        let eff_idx = index_override.or(settings.index);
+        if let Some(idx) = eff_idx {
+            cmd.push_str(&format!(" --source-color-index {idx}"));
+            if let Some(prefer) = settings.prefer {
+                cmd.push_str(&format!(" --prefer {}", prefer.as_str()));
+            }
+        } else if let Some(prefer) = settings.prefer {
             cmd.push_str(&format!(" --prefer {}", prefer.as_str()));
+        } else {
+            cmd.push_str(" --source-color-index 0");
         }
-    } else if let Some(prefer) = settings.prefer {
-        cmd.push_str(&format!(" --prefer {}", prefer.as_str()));
+
+        if let Some(filter) = settings.resize_filter {
+            cmd.push_str(&format!(" --resize-filter {}", filter.as_str()));
+        }
+        if let Some(ld) = settings.lightness_dark {
+            cmd.push_str(&format!(" --lightness-dark {ld}"));
+        }
+        if let Some(ll) = settings.lightness_light {
+            cmd.push_str(&format!(" --lightness-light {ll}"));
+        }
+        if let Some(fc) = settings.fallback_color {
+            let hex_str = format!("#{:02x}{:02x}{:02x}", fc.r, fc.g, fc.b);
+            cmd.push_str(&format!(" --fallback-color '{hex_str}'"));
+        }
+
+        let stdout = amane::output(&cmd);
+        parse_matugen_output(&stdout)
+    };
+
+    if let Some(palette) = run_cmd(None) {
+        Some(palette)
+    } else if settings.index.is_some() && settings.index != Some(0) {
+        run_cmd(Some(0))
     } else {
-        cmd.push_str(" --source-color-index 0");
+        None
     }
-
-    if let Some(filter) = settings.resize_filter {
-        cmd.push_str(&format!(" --resize-filter {}", filter.as_str()));
-    }
-
-    if let Some(ld) = settings.lightness_dark {
-        cmd.push_str(&format!(" --lightness-dark {ld}"));
-    }
-
-    if let Some(ll) = settings.lightness_light {
-        cmd.push_str(&format!(" --lightness-light {ll}"));
-    }
-
-    if let Some(fc) = settings.fallback_color {
-        let hex_str = format!("#{:02x}{:02x}{:02x}", fc.r, fc.g, fc.b);
-        cmd.push_str(&format!(" --fallback-color '{hex_str}'"));
-    }
-
-    let stdout = amane::output(&cmd);
-    parse_matugen_output(&stdout)
 }
 
-fn parse_matugen_output(json_str: &str) -> Option<PaletteTheme> {
+fn parse_matugen_output(json_str: &str) -> Option<ModelTheme> {
     let root: serde_json::Value = serde_json::from_str(json_str).ok()?;
     let colors = root.get("colors")?.as_object()?;
 
@@ -210,15 +202,15 @@ fn parse_matugen_output(json_str: &str) -> Option<PaletteTheme> {
         }
     };
 
-    Some(PaletteTheme {
+    Some(ModelTheme {
         dark: build_palette("dark", Palette::fallback_dark()),
         light: build_palette("light", Palette::fallback_light()),
     })
 }
 
-pub fn pre_configured_theme(theme: PreConfiguredTheme) -> PaletteTheme {
+pub fn pre_configured_theme(theme: PreConfiguredTheme) -> ModelTheme {
     match theme {
-        PreConfiguredTheme::Catppuccin => PaletteTheme {
+        PreConfiguredTheme::Catppuccin => ModelTheme {
             dark: Palette {
                 primary: HexColor::rgb(0x89, 0xb4, 0xfa),
                 on_primary: HexColor::rgb(0x11, 0x11, 0x1b),
@@ -258,7 +250,7 @@ pub fn pre_configured_theme(theme: PreConfiguredTheme) -> PaletteTheme {
                 outline_variant: HexColor::rgb(0xac, 0xb0, 0xbe),
             },
         },
-        PreConfiguredTheme::Gruvbox => PaletteTheme {
+        PreConfiguredTheme::Gruvbox => ModelTheme {
             dark: Palette {
                 primary: HexColor::rgb(0xfe, 0x80, 0x19),
                 on_primary: HexColor::rgb(0x28, 0x28, 0x28),
@@ -298,7 +290,7 @@ pub fn pre_configured_theme(theme: PreConfiguredTheme) -> PaletteTheme {
                 outline_variant: HexColor::rgb(0x92, 0x83, 0x74),
             },
         },
-        PreConfiguredTheme::Nord => PaletteTheme {
+        PreConfiguredTheme::Nord => ModelTheme {
             dark: Palette {
                 primary: HexColor::rgb(0x88, 0xc0, 0xd0),
                 on_primary: HexColor::rgb(0x2e, 0x34, 0x40),
@@ -320,7 +312,7 @@ pub fn pre_configured_theme(theme: PreConfiguredTheme) -> PaletteTheme {
             },
             light: Palette::fallback_light(),
         },
-        PreConfiguredTheme::TokyoNight => PaletteTheme {
+        PreConfiguredTheme::TokyoNight => ModelTheme {
             dark: Palette {
                 primary: HexColor::rgb(0x7a, 0xa2, 0xf7),
                 on_primary: HexColor::rgb(0x1a, 0x1b, 0x26),
@@ -342,7 +334,7 @@ pub fn pre_configured_theme(theme: PreConfiguredTheme) -> PaletteTheme {
             },
             light: Palette::fallback_light(),
         },
-        PreConfiguredTheme::Solarised => PaletteTheme {
+        PreConfiguredTheme::Solarised => ModelTheme {
             dark: Palette {
                 primary: HexColor::rgb(0x26, 0x8b, 0xd2),
                 on_primary: HexColor::rgb(0x00, 0x2b, 0x36),
@@ -364,7 +356,7 @@ pub fn pre_configured_theme(theme: PreConfiguredTheme) -> PaletteTheme {
             },
             light: Palette::fallback_light(),
         },
-        PreConfiguredTheme::Monokai => PaletteTheme {
+        PreConfiguredTheme::Monokai => ModelTheme {
             dark: Palette {
                 primary: HexColor::rgb(0xa6, 0xe2, 0x2e),
                 on_primary: HexColor::rgb(0x27, 0x28, 0x22),
@@ -392,7 +384,6 @@ pub fn pre_configured_theme(theme: PreConfiguredTheme) -> PaletteTheme {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use configuration::settings::theme::{ColorPreference, ResizeFilter, SchemeType};
 
     #[test]
     fn test_theme_mode_toggle() {
@@ -425,8 +416,8 @@ mod tests {
         let settings = SeedColorTheme {
             seed_color: HexColor::rgb(0x41, 0x5f, 0x91),
             contrast: 0.2,
-            opacity: 255.into(),
-            scheme_type: SchemeType::SchemeVibrant,
+            opacity: model::Alpha(255),
+            scheme_type: configuration::settings::theme::SchemeType::SchemeVibrant,
             lightness_dark: Some(0.1),
             lightness_light: Some(0.2),
         };
@@ -444,16 +435,19 @@ mod tests {
             let settings = WallpaperTheme {
                 index: Some(1),
                 contrast: 0.1,
-                opacity: 255.into(),
-                scheme_type: SchemeType::SchemeFruitSalad,
-                prefer: Some(ColorPreference::Saturation),
-                resize_filter: Some(ResizeFilter::Gaussian),
+                opacity: model::Alpha(255),
+                scheme_type: configuration::settings::theme::SchemeType::SchemeFruitSalad,
+                prefer: Some(configuration::settings::theme::ColorPreference::Saturation),
+                resize_filter: Some(configuration::settings::theme::ResizeFilter::Gaussian),
                 lightness_dark: Some(-0.1),
                 lightness_light: Some(0.1),
                 fallback_color: Some(HexColor::rgb(0x1e, 0x1e, 0x2e)),
             };
             let res = generate_from_wallpaper(serp_wp, &settings);
-            assert!(res.is_some(), "matugen failed on serpantinum wallpaper placeholder with full Section 10 args");
+            assert!(
+                res.is_some(),
+                "matugen failed on serpantinum wallpaper placeholder with full Section 10 args"
+            );
             let theme = res.unwrap();
             assert_ne!(theme.dark.primary, theme.dark.surface);
             assert_ne!(theme.light.primary, theme.light.surface);

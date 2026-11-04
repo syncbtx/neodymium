@@ -67,7 +67,7 @@ impl Axis {
     }
 
     pub fn cross_padding(&self, padding: Padding) -> f32 {
-        let (a, b) = self.main((padding.top, padding.bottom), (padding.left, padding.right));
+        let (a, b) = self.cross((padding.left, padding.right), (padding.top, padding.bottom));
         a + b
     }
 }

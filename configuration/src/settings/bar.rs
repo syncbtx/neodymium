@@ -1,14 +1,7 @@
-use std::str::FromStr;
-
-use hex_color::HexColor;
 use model::{
     Alpha, Anchor, AttachmentMode, Backdrop, Border, Edge, Font, Insets, Justify, Layer,
     MainAxisSize,
-    bar::{
-        Bar,
-        module::Module,
-        section::{BarSectionColors, SectionTint},
-    },
+    bar::{Bar, module::Module, section::SectionTint},
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -28,19 +21,16 @@ pub struct BarSettings {
     pub autohide: bool,
     pub border: Border,
     pub border_radius: u32,
-    pub section_border_radius: u32, // global fallback for sections
     pub backdrop: Backdrop,
-    pub background: HexColor, // applied when backdrop is None and also serves as fallback for sections
-    pub foreground: HexColor,
-    pub contrast: bool,
     pub opacity: Alpha,
-    pub main_axis_size: MainAxisSize, // length
-    pub section_cross_axis_size: u32, // section thickness
+    pub main_axis_size: MainAxisSize,
     pub padding: Insets<u32>,
-    pub section_padding: Insets<u32>,
-    pub sections: Vec<SectionSettings>,
-    pub sections_justify: Justify,
     pub font: Option<Font>,
+    pub section_cross_axis_size: u32,
+    pub section_padding: Insets<u32>,
+    pub section_border_radius: u32,
+    pub sections_justify: Justify,
+    pub sections: Vec<SectionSettings>,
 }
 
 impl Default for BarSettings {
@@ -58,9 +48,6 @@ impl Default for BarSettings {
             border_radius: 8,
             section_border_radius: 8,
             backdrop: Backdrop::default(),
-            background: HexColor::from_str("#ecdecdff").unwrap(),
-            foreground: HexColor::from_str("#1cec1cff").unwrap(),
-            contrast: true,
             opacity: Alpha::default(),
             main_axis_size: MainAxisSize::Percent(80),
             section_cross_axis_size: 24,
@@ -69,15 +56,11 @@ impl Default for BarSettings {
             sections: vec![
                 SectionSettings {
                     tint: SectionTint::default(),
-                    background: None,
-                    foreground: None,
-                    contrast: true,
-                    opacity: 255,
+                    opacity: Alpha::default(),
                     spacing: 8,
-                    padding: Insets::all(8),
+                    padding: Some(Insets::all(8)),
                     border: Border::None,
                     border_radius: Some(8),
-                    colors: BarSectionColors::default(),
                     font: None,
                     modules: vec![Module::Workspaces {
                         collapse_unused: true,
@@ -85,15 +68,11 @@ impl Default for BarSettings {
                 },
                 SectionSettings {
                     tint: SectionTint::default(),
-                    background: None,
-                    foreground: None,
-                    contrast: true,
-                    opacity: 255,
+                    opacity: Alpha::default(),
                     spacing: 8,
-                    padding: Insets::all(8),
+                    padding: Some(Insets::all(8)),
                     border: Border::None,
                     border_radius: Some(8),
-                    colors: BarSectionColors::default(),
                     font: None,
                     modules: vec![Module::Calendar {
                         time: true,
@@ -104,15 +83,11 @@ impl Default for BarSettings {
                 },
                 SectionSettings {
                     tint: SectionTint::default(),
-                    background: None,
-                    foreground: None,
-                    contrast: true,
-                    opacity: 255,
+                    opacity: Alpha::default(),
                     spacing: 8,
-                    padding: Insets::all(8),
+                    padding: Some(Insets::all(8)),
                     border: Border::None,
                     border_radius: Some(8),
-                    colors: BarSectionColors::default(),
                     font: None,
                     modules: vec![Module::FocusedWindowIcon],
                 },
@@ -141,9 +116,6 @@ impl Resolve for BarSettings {
             border_radius: self.border_radius,
             section_border_radius: self.section_border_radius,
             backdrop: self.backdrop.clone(),
-            background: self.background,
-            foreground: self.foreground,
-            contrast: self.contrast,
             opacity: self.opacity,
             main_axis_size: self.main_axis_size,
             section_cross_axis_size: self.section_cross_axis_size,

@@ -2,7 +2,7 @@ use hex_color::HexColor;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{Border, Font, Insets, bar::module::Module};
+use crate::{Alpha, Border, Font, Insets, bar::module::Module};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -38,15 +38,11 @@ impl Default for BarSectionColors {
 #[derive(Debug)]
 pub struct BarSection {
     pub tint: SectionTint,
-    pub background: Option<HexColor>,
-    pub foreground: Option<HexColor>,
-    pub contrast: bool,
-    pub opacity: u32,
+    pub opacity: Alpha,
     pub spacing: u32,
-    pub padding: Insets<u32>,
+    pub padding: Option<Insets<u32>>,
     pub border: Border,
     pub border_radius: Option<u32>,
-    pub colors: BarSectionColors,
     pub font: Option<Font>,
     pub modules: Vec<Module>,
 }

@@ -1,8 +1,6 @@
 pub mod module;
 pub mod section;
 
-use hex_color::HexColor;
-
 use crate::{
     Alpha, Anchor, AttachmentMode, Backdrop, BarBlend, Border, Edge, Font, Insets, Justify, Layer,
     MainAxisSize, ScreenCornerClaimer, bar::section::BarSection,
@@ -15,24 +13,21 @@ pub struct Bar {
     pub edge: Edge,
     pub anchor: Anchor,
     pub layer: Layer,
+    pub attachment_mode: AttachmentMode,
     pub islands: bool,
     pub autohide: bool,
     pub spacing: u32,
     pub border: Border,
     pub border_radius: u32,
-    pub section_border_radius: u32,
     pub backdrop: Backdrop,
-    pub background: HexColor,
-    pub foreground: HexColor,
-    pub contrast: bool,
     pub opacity: Alpha,
-    pub attachment_mode: AttachmentMode,
     pub main_axis_size: MainAxisSize,
-    pub section_cross_axis_size: u32,
     pub margin: Insets<u32>,
     pub padding: Insets<u32>,
-    pub section_padding: Insets<u32>,
     pub font: Option<Font>,
+    pub section_cross_axis_size: u32,
+    pub section_padding: Insets<u32>,
+    pub section_border_radius: u32,
     pub sections_justify: Justify,
     pub sections: Vec<BarSection>,
 }
@@ -58,9 +53,6 @@ impl Default for Bar {
             border_radius: 8,
             section_border_radius: 8,
             backdrop: Backdrop::None,
-            background: HexColor::BLACK,
-            foreground: HexColor::WHITE,
-            contrast: true,
             opacity: Alpha::default(),
             attachment_mode: AttachmentMode::default(),
             main_axis_size: MainAxisSize::default(),

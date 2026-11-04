@@ -40,6 +40,10 @@ impl Sanitize for AppSettings {
                 if section.font.is_none() {
                     section.font = bar.font.clone();
                 }
+
+                if section.padding.is_none() {
+                    section.padding = Some(bar.section_padding);
+                }
             }
         }
     }

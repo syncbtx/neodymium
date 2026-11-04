@@ -1,17 +1,18 @@
-use amane::{Align, Justify, Padding, Service, Size, Widget};
-use model::bar::{
-    Bar,
-    section::{BarSection, BarSectionColors, SectionTint},
+use amane::{Align, Justify, Padding, Size, Widget};
+use model::{
+    bar::{
+        Bar,
+        section::{BarSection, BarSectionColors, SectionTint},
+    },
+    palette::Palette,
 };
 
 use crate::{
     axis::{Axis, Flow},
-    color::resolve_color_with_alpha,
-    module,
-    services::Theme,
+    color, module,
 };
 
-pub fn view(section: &BarSection, parent: &Bar) -> Box<dyn Widget> {
+pub fn view(section: &BarSection, parent: &Bar, palette: &Palette, opacity: u8) -> Box<dyn Widget> {
     let axis = Axis::of(parent.edge);
     let font = section
         .font
@@ -21,17 +22,14 @@ pub fn view(section: &BarSection, parent: &Bar) -> Box<dyn Widget> {
     let cross_size = parent.section_cross_axis_size as f32;
 
     let padding = Padding {
-        top: section.padding.top as f32,
-        right: section.padding.right as f32,
-        bottom: section.padding.bottom as f32,
-        left: section.padding.left as f32,
+        top: section.padding.unwrap().top as f32,
+        right: section.padding.unwrap().right as f32,
+        bottom: section.padding.unwrap().bottom as f32,
+        left: section.padding.unwrap().left as f32,
     };
 
     let module_thickness = (cross_size - axis.cross_padding(padding)).max(16.0);
     let inner_cross = Size::Fixed(module_thickness);
-
-    let theme = Theme::read();
-    let palette = theme.active();
 
     let (card_bg, pill_bg, text_fg, text_muted) = match section.tint {
         SectionTint::Surface => (
@@ -67,8 +65,8 @@ pub fn view(section: &BarSection, parent: &Bar) -> Box<dyn Widget> {
     };
 
     let resolved_colors = BarSectionColors {
-        background: section.background.unwrap_or(card_bg),
-        foreground: section.foreground.unwrap_or(text_fg),
+        background: card_bg,
+        foreground: text_fg,
         module_background: pill_bg,
         module_foreground: text_muted,
     };
@@ -86,6 +84,7 @@ pub fn view(section: &BarSection, parent: &Bar) -> Box<dyn Widget> {
                 &font,
                 9.0,
                 700,
+                palette,
             )
         })
         .collect();
@@ -97,19 +96,16 @@ pub fn view(section: &BarSection, parent: &Bar) -> Box<dyn Widget> {
         None => parent.section_border_radius as f32,
     };
 
+    let theme_alpha = opacity;
+    let eff_alpha = ((section.opacity.0 as u16 * theme_alpha as u16) / 255) as u8;
+    let card_color = color::resolve_color_with_alpha(resolved_colors.background, eff_alpha);
+
     Box::new(
         Flow::new(axis, module_views)
             .gap(gap)
             .align(Align::Center)
             .justify(Justify::Center)
             .cross_size(inner_cross)
-            .into_card(
-                padding,
-                radius,
-                Some(resolve_color_with_alpha(
-                    resolved_colors.background,
-                    theme.opacity(),
-                )),
-            ),
+            .into_card(padding, radius, Some(card_color)),
     )
 }

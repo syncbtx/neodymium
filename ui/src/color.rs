@@ -6,5 +6,6 @@ pub fn resolve_color(c: HexColor) -> Color {
 }
 
 pub fn resolve_color_with_alpha(c: HexColor, a: u8) -> Color {
-    Color::rgba(c.r, c.g, c.b, a)
+    let eff_a = ((c.a as u16 * a as u16) / 255) as u8;
+    Color::rgba(c.r, c.g, c.b, eff_a)
 }

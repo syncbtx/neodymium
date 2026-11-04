@@ -6,8 +6,8 @@ use model::{AttachmentMode, MainAxisSize, bar::Bar};
 
 use crate::{
     axis::{Axis, Flow},
-    color::resolve_color_with_alpha,
     section,
+    services::Theme,
 };
 
 fn resolve_layer(layer: model::Layer) -> amane::Layer {
@@ -146,17 +146,23 @@ pub fn view(bar: &Bar, monitor: &Monitor) -> LayerWindow {
     let (vertical, horizontal) = resolve_anchors(bar);
     let is_attached = matches!(bar.attachment_mode, AttachmentMode::Attached { .. });
 
+    let theme = Theme::read();
+
+    let opacity = theme.opacity();
+
+    let palette = theme.active();
+
     let bar_fill = if bar.islands {
         Color::TRANSPARENT
     } else {
-        let theme = crate::services::Theme::read();
-        resolve_color_with_alpha(theme.active().surface, theme.opacity())
+        let eff = ((bar.opacity.0 as u16 * opacity as u16) / 255) as u8;
+        crate::color::resolve_color_with_alpha(palette.surface, eff)
     };
 
     let sections = bar
         .sections
         .iter()
-        .map(|sec| section::view(sec, bar))
+        .map(|sec| section::view(sec, bar, palette, opacity))
         .collect();
 
     let zone = if bar.exclusive_zone {

@@ -85,44 +85,11 @@ impl SettingsEngine {
         let mut base =
             serde_json::to_value(AppSettings::default()).unwrap_or(Value::Object(Map::new()));
 
-        if NEODYMIUM_DEFAULT_SETTINGS_PATH.exists() {
-            println!(
-                "DEFAULT PATH: {:#?}",
-                NEODYMIUM_DEFAULT_SETTINGS_PATH.as_path()
-            );
-            println!("DEFAULT PATH EXISTS: true");
-            match std::fs::read_to_string(&*NEODYMIUM_DEFAULT_SETTINGS_PATH) {
-                Ok(json) => match Self::parse_json(&json) {
-                    Ok(overlay) => {
-                        Self::merge(&mut base, &overlay);
-                    }
-                    Err(e) => println!("PARSE ERR: {:#?}", e),
-                },
-                Err(e) => println!("READ ERR: {:#?}", e),
-            }
-        } else {
-            println!(
-                "DEFAULT PATH DOES NOT EXIST: {:#?}",
-                NEODYMIUM_DEFAULT_SETTINGS_PATH.display()
-            );
-        }
+        let _ = Self::read_layer(&NEODYMIUM_DEFAULT_SETTINGS_PATH, &mut base);
+        let _ = Self::read_layer(&NEODYMIUM_USER_SETTINGS_PATH, &mut base);
 
-        if NEODYMIUM_USER_SETTINGS_PATH.exists() {
-            if let Ok(json) = std::fs::read_to_string(&*NEODYMIUM_USER_SETTINGS_PATH) {
-                if let Ok(overlay) = Self::parse_json(&json) {
-                    Self::merge(&mut base, &overlay);
-                }
-            }
-        }
-
-        let mut settings: AppSettings = match serde_json::from_value(base.clone()) {
-            Ok(s) => s,
-            Err(e) => {
-                println!("DESERIALIZE ERROR FROM BASE: {}", e);
-                println!("FALLING BACK TO DEFAULTS: {}", e);
-                AppSettings::default()
-            }
-        };
+        let mut settings: AppSettings =
+            serde_json::from_value(base).unwrap_or_else(|_| AppSettings::default());
         settings.sanitize();
         settings
     }

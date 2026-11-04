@@ -25,7 +25,27 @@ impl amane::Service for ShellState {
         let _ = SettingsEngine::init();
         let settings = SettingsEngine::load();
         let wp_path = resolve_active_wallpaper();
-        ui::services::Theme::write().apply(&settings.theme, wp_path);
+
+        // At startup the UI thread hasn't started yet, so it's safe to do
+        // all the slow work here before touching the write lock.
+        let pre_configured = ui::services::pre_configured_theme(settings.theme.pre_configured);
+        let seed_palette = ui::services::generate_from_seed(&settings.theme.seed_color);
+        let wp_palette = wp_path
+            .filter(|p| p.exists())
+            .and_then(|p| ui::services::generate_from_wallpaper(p, &settings.theme.wallpaper));
+
+        {
+            let mut theme = ui::services::Theme::write();
+            theme.set_meta(&settings.theme);
+            theme.set_pre_configured(pre_configured);
+            if let Some(p) = seed_palette {
+                theme.set_seed_color(p);
+            }
+            if let Some(p) = wp_palette {
+                theme.set_wallpaper(p);
+            }
+        }
+
         Self { settings }
     }
 
@@ -37,7 +57,28 @@ impl amane::Service for ShellState {
             match SettingsEngine::reload() {
                 Ok(settings) => {
                     let wp_path = resolve_active_wallpaper();
-                    ui::services::Theme::write().apply(&settings.theme, wp_path);
+
+                    let pre_configured =
+                        ui::services::pre_configured_theme(settings.theme.pre_configured);
+
+                    let seed_palette = ui::services::generate_from_seed(&settings.theme.seed_color);
+
+                    let wp_palette = wp_path.filter(|p| p.exists()).and_then(|p| {
+                        ui::services::generate_from_wallpaper(p, &settings.theme.wallpaper)
+                    });
+
+                    {
+                        let mut theme = ui::services::Theme::write();
+                        theme.set_meta(&settings.theme);
+                        theme.set_pre_configured(pre_configured);
+                        if let Some(p) = seed_palette {
+                            theme.set_seed_color(p);
+                        }
+                        if let Some(p) = wp_palette {
+                            theme.set_wallpaper(p);
+                        }
+                    }
+
                     ShellState::write().settings = settings;
                     println!("reload successful");
                 }
