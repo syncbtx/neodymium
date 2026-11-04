@@ -11,3 +11,4 @@ amane = {git = "https://github.com/MystiaFin/amane.git", tag="v.0.1.2-experiment
 hex_color = {path = "/home/syncbtx/Projects/hex_color", features = ["serde", "schemars"]}
 serde_json = "1.0.154"
 hhmmss = "0.1.0"
+rand = "0.10.3"

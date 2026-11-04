@@ -1,4 +1,5 @@
 pub mod axis;
+pub mod backdrop;
 pub mod bar;
 pub mod bars;
 pub mod card;
@@ -7,5 +8,4 @@ pub mod component;
 pub mod module;
 pub mod section;
 pub mod services;
-
 pub use axis::*;

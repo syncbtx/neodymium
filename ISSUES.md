@@ -13,6 +13,14 @@
 - **Workaround:** the shell writes `amane.kdl` (`layout { gaps N }`), and the user adds `include "amane.kdl"` at the end of `config.kdl`. Needs niri 25.11+, and niri live-reloads. Don't generate `struts`, because they are not merged.
 - **Open:** the gap value must live in the model and be passed into `view()`.
 
+
+### 3. Progress does not respond to changes in ratio
+- values like amplitude and freq tied to the current value remain constant
+
+### 4. The Axis and Flow refactor degraded the layout fidelity
+- some functionality that was working before fails 
+- examples: the anchor doesn't respond 
+- the bar padding doesn't align in attached mode with bracket bars: it appears to be 4px always regardless of what the settings say. the inner triming works and the niri gap is 8px yet they don't align like they did before
 ## Resolved
 
 - **Floating "stopped applying" after the `bar_padding` refactor:** the attachment mode hadn't been toggled. The envelope and insets were fine.

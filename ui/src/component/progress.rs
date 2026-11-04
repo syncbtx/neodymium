@@ -1,21 +1,21 @@
-use amane::{Canvas, Cap, Circle, Color, Line, Path, Rectangle, Shape, Widget, shapes};
+use amane::{Canvas, Cap, Circle, Color, Path, Rectangle, Shape, shapes};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum ProgressStyle {
+pub enum ProgressMode {
     Ring,
     WaveyRing,
     Bar,
     WaveyBar,
 }
 
-impl From<model::bar::module::SystemModuleStyle> for ProgressStyle {
+impl From<model::bar::module::SystemModuleStyle> for ProgressMode {
     fn from(style: model::bar::module::SystemModuleStyle) -> Self {
         match style {
-            model::bar::module::SystemModuleStyle::Ring => ProgressStyle::Ring,
-            model::bar::module::SystemModuleStyle::WaveyRing => ProgressStyle::WaveyRing,
-            model::bar::module::SystemModuleStyle::Bar => ProgressStyle::Bar,
-            model::bar::module::SystemModuleStyle::WaveyBar => ProgressStyle::WaveyBar,
-            model::bar::module::SystemModuleStyle::Graph => ProgressStyle::WaveyBar,
+            model::bar::module::SystemModuleStyle::Ring => ProgressMode::Ring,
+            model::bar::module::SystemModuleStyle::WaveyRing => ProgressMode::WaveyRing,
+            model::bar::module::SystemModuleStyle::Bar => ProgressMode::Bar,
+            model::bar::module::SystemModuleStyle::WaveyBar => ProgressMode::WaveyBar,
+            model::bar::module::SystemModuleStyle::Graph => ProgressMode::WaveyBar,
         }
     }
 }
@@ -164,14 +164,18 @@ pub struct Style {
     pub size: f32,
     pub thickness: f32,
     pub amplitude: f32,
-    pub waves: f32,
-    pub track: Color,
+    pub freq: f32,
     pub color: Color,
+    pub track: Color,
+    pub warning: Color,
+    pub error: Color,
+    pub thresholds: [f32; 2],
+    pub mode: ProgressMode,
 }
 
 /// A wavy progress ring, starting at 12 o'clock. `progress` is 0.0..=1.0,
 /// `phase` is the wave offset in radians.
-pub fn ring(style: Style, progress: f32, phase: f32) -> Canvas {
+pub fn ring_(style: Style, progress: f32, phase: f32) -> Canvas {
     let size = style.size;
     let middle = size / 2.0;
 
@@ -193,7 +197,7 @@ pub fn ring(style: Style, progress: f32, phase: f32) -> Canvas {
                 middle,
                 radius,
                 style.amplitude,
-                style.waves,
+                style.freq,
                 phase,
                 0.0,
                 sweep,
@@ -206,184 +210,139 @@ pub fn ring(style: Style, progress: f32, phase: f32) -> Canvas {
     Canvas::new().width(size).height(size).shapes(layers)
 }
 
-fn to_path(curve: Curve) -> Path {
-    let mut path = Path::new().move_to(curve.start.0, curve.start.1);
-
-    for c in curve.cubics {
-        path = path.cubic_to(c[0], c[1], c[2], c[3], c[4], c[5]);
-    }
-
-    path
+pub fn color_to_vec4(c: Color) -> [f32; 4] {
+    let r = c.red() as f32 / 255.0;
+    let g = c.green() as f32 / 255.0;
+    let b = c.blue() as f32 / 255.0;
+    let a = c.alpha() as f32 / 255.0;
+    [r, g, b, a]
 }
 
-/// Look of a linear bar.
-#[derive(Clone, Copy)]
-pub struct BarStyle {
-    pub width: f32,
-    pub thickness: f32,
-    pub amplitude: f32,
-    /// Pixels per full wave.
-    pub wavelength: f32,
-    pub track: Color,
-    pub color: Color,
-}
+pub fn progress(style: &Style, current: f32, phase: f32) -> Rectangle {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/shaders/progress.wgsl");
 
-/// A wavy linear progress bar: flat track, wavy active part with round caps.
-/// `progress` is 0.0..=1.0. The canvas is `amplitude * 2 + thickness` tall.
-pub fn bar(style: BarStyle, progress: f32, phase: f32) -> Canvas {
-    let height = style.amplitude * 2.0 + style.thickness;
-    let middle = height / 2.0;
+    let amplitude = (current * 1.35).max(1.0);
 
-    // the round caps stick out half a thickness, so inset by that
-    let inset = style.thickness / 2.0;
-    let start = inset;
-    let end = style.width - inset;
+    let freq = 8.0 * 1.0 / current.max(0.75);
 
-    let length = (end - start) * progress.clamp(0.0, 1.0);
-
-    let mut layers = shapes![
-        Line::new()
-            .from(start, middle)
-            .to(end, middle)
-            .stroke(style.thickness, style.track)
-            .cap(Cap::Round)
-    ];
-
-    if length > 0.5 {
-        let curve = wavy_line_curve(
-            start,
-            middle,
-            length,
-            style.amplitude,
-            style.wavelength,
-            phase,
-        );
-
-        layers.push(Box::new(
-            to_path(curve)
-                .stroke(style.thickness, style.color)
-                .cap(Cap::Round),
-        ));
-    }
-
-    Canvas::new()
-        .width(style.width)
-        .height(height)
-        .shapes(layers)
-}
-
-pub fn view(
-    _is_horizontal: bool,
-    ratio: f32, // expected 0.0..=1.0
-    style: ProgressStyle,
-    length: f32,
-    thickness: f32,
-    phase: f32,
-    track_color: Color,
-    fill_color: Color,
-) -> Box<dyn Widget> {
-    let ratio = ratio.clamp(0.0, 1.0);
-
-    let widget: Box<dyn Widget> = match style {
-        ProgressStyle::Bar => {
-            let bar_style = BarStyle {
-                width: length,
-                thickness,
-                amplitude: 0.0,
-                wavelength: 1.0,
-                track: track_color,
-                color: fill_color,
-            };
-            Box::new(bar(bar_style, ratio, phase))
-        }
-        ProgressStyle::WaveyBar => {
-            let bar_style = BarStyle {
-                width: length,
-                thickness,
-                amplitude: 1.5,
-                wavelength: 14.0,
-                track: track_color,
-                color: fill_color,
-            };
-            Box::new(bar(bar_style, ratio, phase))
-        }
-        ProgressStyle::Ring => {
-            let ring_style = Style {
-                size: length,
-                thickness,
-                amplitude: 0.0,
-                waves: 0.0,
-                track: track_color,
-                color: fill_color,
-            };
-            Box::new(ring(ring_style, ratio, phase))
-        }
-        ProgressStyle::WaveyRing => {
-            let ring_style = Style {
-                size: length,
-                thickness,
-                amplitude: 1.0,
-                waves: 8.0,
-                track: track_color,
-                color: fill_color,
-            };
-            Box::new(ring(ring_style, ratio, phase))
-        }
+    let mode = match style.mode {
+        ProgressMode::Ring | ProgressMode::WaveyRing => 0.0,
+        ProgressMode::Bar | ProgressMode::WaveyBar => 1.0,
     };
 
-    widget
+    let warning = style.thresholds[0];
+    let error = style.thresholds[1];
+
+    Rectangle::new()
+        .width(style.size)
+        .height(style.size)
+        .shader(path)
+        .shader_values(vec![
+            color_to_vec4(style.color),                // [0] normal color
+            color_to_vec4(style.track),                // [1] track color
+            [style.thickness, amplitude, freq, phase], // [2] thickness, amplitude, freq, phase
+            [current, mode, warning, error],           // [3] progress, mode, warn, error
+            color_to_vec4(style.warning),              // [4] warning color
+            color_to_vec4(style.error),                // [5] error color
+        ])
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use model::bar::module::SystemModuleStyle;
+pub fn flat_bar(
+    size: f32,
+    thickness: f32,
+    current: f32,
+    phase: f32,
+    colors: &[Color; 4],
+    thresholds: [f32; 2],
+) -> Rectangle {
+    let style = &Style {
+        size,
+        thickness,
+        amplitude: 0.0,
+        freq: 0.0,
+        color: colors[0],
+        track: colors[1],
+        warning: colors[2],
+        error: colors[3],
+        thresholds,
+        mode: ProgressMode::Bar,
+    };
+    progress(style, current, phase)
+}
 
-    #[test]
-    fn test_progress_style_from_system_module_style() {
-        assert_eq!(
-            ProgressStyle::from(SystemModuleStyle::Ring),
-            ProgressStyle::Ring
-        );
-        assert_eq!(
-            ProgressStyle::from(SystemModuleStyle::WaveyRing),
-            ProgressStyle::WaveyRing
-        );
-        assert_eq!(
-            ProgressStyle::from(SystemModuleStyle::Bar),
-            ProgressStyle::Bar
-        );
-        assert_eq!(
-            ProgressStyle::from(SystemModuleStyle::WaveyBar),
-            ProgressStyle::WaveyBar
-        );
-        assert_eq!(
-            ProgressStyle::from(SystemModuleStyle::Graph),
-            ProgressStyle::WaveyBar
-        );
-    }
+pub fn flat_ring(
+    size: f32,
+    thickness: f32,
+    current: f32,
+    phase: f32,
+    colors: &[Color; 4],
+    thresholds: [f32; 2],
+) -> Rectangle {
+    let style = &Style {
+        size,
+        thickness,
+        amplitude: 0.0,
+        freq: 0.0,
+        color: colors[0],
+        track: colors[1],
+        warning: colors[2],
+        error: colors[3],
+        thresholds,
+        mode: ProgressMode::Ring,
+    };
+    progress(style, current, phase)
+}
 
-    #[test]
-    fn test_progress_view_construction() {
-        let _w_bar = view(
-            true,
-            0.5,
-            ProgressStyle::Bar,
-            64.0,
-            2.0,
-            0.0,
-            Color::BLACK,
-            Color::WHITE,
-        );
-        let _w_ring = view(
-            true,
-            0.75,
-            ProgressStyle::WaveyRing,
-            32.0,
-            2.0,
-            1.5,
-            Color::BLACK,
-            Color::WHITE,
-        );
-    }
+pub fn wavy_bar(
+    size: f32,
+    thickness: f32,
+    current: f32,
+    phase: f32,
+    colors: &[Color; 4],
+    thresholds: [f32; 2],
+) -> Rectangle {
+    let amplitude = (current * 1.35).max(1.0);
+
+    let freq = 8.0 * 1.0 / current.max(0.75);
+
+    let style = &Style {
+        size,
+        thickness,
+        amplitude,
+        freq,
+        color: colors[0],
+        track: colors[1],
+        warning: colors[2],
+        error: colors[3],
+        thresholds,
+        mode: ProgressMode::WaveyBar,
+    };
+    progress(style, current, phase)
+}
+
+pub fn wavy_ring(
+    size: f32,
+    thickness: f32,
+    current: f32,
+    phase: f32,
+    colors: &[Color; 4],
+    thresholds: [f32; 2],
+) -> Rectangle {
+    let amplitude = (current * 1.35).max(1.0);
+
+    let freq = 8.0 * 1.0 / current.max(0.75);
+
+    let style = &Style {
+        size,
+        thickness,
+        amplitude,
+        freq,
+        color: colors[0],
+        track: colors[1],
+        warning: colors[2],
+        error: colors[3],
+        thresholds,
+        mode: ProgressMode::WaveyRing,
+    };
+    progress(style, current, phase)
 }

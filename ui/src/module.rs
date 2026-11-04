@@ -1,13 +1,9 @@
-use amane::{
-    Align, Center, Column, Cpu, Media, Memory, Radius, Rectangle, Service, Stack, Text, Widget,
-    children,
-};
-use hex_color::HexColor;
+use amane::{Align, Center, Column, Cpu, Media, Memory, Radius, Rectangle, Service, Text, Widget};
 use hhmmss::Hhmmss;
 use model::{
     Font,
     bar::{
-        module::{Module, SystemModule, SystemModuleStyle},
+        module::{Module, SystemModuleStyle},
         section::BarSectionColors,
     },
     palette::Palette,
@@ -45,6 +41,7 @@ pub fn view(
     font: &Font,
     font_size: f32,
     font_weight: u16,
+    phase: f32,
     palette: &Palette,
 ) -> Box<dyn Widget> {
     let font_size = font_size.min(thickness);
@@ -228,21 +225,7 @@ pub fn view(
                 ) as Box<dyn Widget>,
             }
         }
-        Module::SystemModuleCapsule {
-            label,
-            module,
-            style,
-        } => {
-            let color = |ratio: f32| -> HexColor {
-                if ratio > 0.85 {
-                    palette.error
-                } else if ratio > 0.70 {
-                    palette.tertiary
-                } else {
-                    palette.primary
-                }
-            };
-
+        Module::SystemModuleCapsule { module, style, .. } => {
             let (key, raw_ratio) = match module {
                 model::bar::module::SystemModule::Cpu => {
                     let pct = Cpu::read().percent();
@@ -257,136 +240,42 @@ pub fn view(
             };
 
             let ratio = services::motion::smooth(key, raw_ratio);
+
             let is_wavy = matches!(
                 style,
                 model::bar::module::SystemModuleStyle::WaveyRing
                     | model::bar::module::SystemModuleStyle::WaveyBar
             );
-            let phase = if is_wavy {
-                services::motion::phase()
-            } else {
-                0.0
+            let phase = if is_wavy { phase } else { 0.0 };
+
+            let colors = [
+                resolve_color(palette.primary),
+                resolve_color(palette.surface_container_highest),
+                resolve_color(palette.secondary),
+                resolve_color(palette.error),
+            ];
+
+            let thresholds = [0.50, 0.75];
+
+            let rect = match style {
+                SystemModuleStyle::Ring => {
+                    progress::flat_ring(thickness, 2.0, ratio, phase, &colors, thresholds)
+                }
+                SystemModuleStyle::WaveyRing => {
+                    progress::wavy_ring(thickness, 2.0, ratio, phase, &colors, thresholds)
+                }
+                SystemModuleStyle::Bar => {
+                    progress::flat_bar(thickness, 2.0, ratio, phase, &colors, thresholds)
+                }
+                SystemModuleStyle::WaveyBar => {
+                    progress::wavy_bar(thickness, 2.0, ratio, phase, &colors, thresholds)
+                }
+                SystemModuleStyle::Graph => {
+                    progress::wavy_bar(thickness, 2.0, ratio, phase, &colors, thresholds)
+                }
             };
 
-            let pct_val = (ratio * 100.0) as u32;
-            let track_color = resolve_color(palette.surface_container_highest);
-            let fill_color = resolve_color(color(ratio));
-
-            match style {
-                SystemModuleStyle::Ring | SystemModuleStyle::WaveyRing => {
-                    let ring_size = 32.0f32.min(thickness).max(20.0);
-                    let (amplitude, waves) = if is_wavy { (1.0, 8.0) } else { (0.0, 0.0) };
-                    let ring_style = progress::Style {
-                        size: ring_size,
-                        thickness: 2.0,
-                        amplitude,
-                        waves,
-                        track: track_color,
-                        color: fill_color,
-                    };
-
-                    let ring_font_size = (ring_size * 0.42).min(font_size).max(10.0);
-                    let icon = match module {
-                        SystemModule::Cpu => "\u{f035b}",
-                        SystemModule::Ram => "\u{f035b}",
-                        SystemModule::Disk => todo!(),
-                        SystemModule::Temp => todo!(),
-                    };
-                    let pct_text = Rectangle::new()
-                        .width(ring_size - ring_style.thickness)
-                        .height(ring_size)
-                        .align_child(Center, Center)
-                        .child(
-                            Text::new(format!("{}", icon))
-                                .font(&font.path_or_name)
-                                .size(ring_font_size)
-                                .weight(font_weight)
-                                .color(resolve_color(colors.foreground)),
-                        );
-
-                    let ring_widget = Stack::new(children![
-                        progress::ring(ring_style, ratio, phase),
-                        pct_text
-                    ]);
-
-                    if label {
-                        let label_widget = Text::new(module.label().to_uppercase())
-                            .font(&font.path_or_name)
-                            .size(font_size)
-                            .weight(font_weight)
-                            .color(resolve_color(colors.foreground));
-
-                        Flow::new(
-                            axis,
-                            vec![
-                                Box::new(label_widget) as Box<dyn Widget>,
-                                Box::new(ring_widget) as Box<dyn Widget>,
-                            ],
-                        )
-                        .gap(6.0)
-                        .align(Align::Center)
-                        .into_widget()
-                    } else {
-                        Box::new(ring_widget) as Box<dyn Widget>
-                    }
-                }
-                model::bar::module::SystemModuleStyle::Bar
-                | model::bar::module::SystemModuleStyle::WaveyBar
-                | model::bar::module::SystemModuleStyle::Graph => {
-                    let bar_width = if axis.is_horizontal() {
-                        64.0
-                    } else {
-                        (thickness - 8.0).max(24.0)
-                    };
-                    let (amplitude, wavelength) = if is_wavy { (1.5, 14.0) } else { (0.0, 1.0) };
-                    let bar_style = progress::BarStyle {
-                        width: bar_width,
-                        thickness: 2.0,
-                        amplitude,
-                        wavelength,
-                        track: track_color,
-                        color: fill_color,
-                    };
-                    let bar_widget = progress::bar(bar_style, ratio, phase);
-
-                    let pct_widget = Text::new(format!("{}", pct_val))
-                        .font(&font.path_or_name)
-                        .size(font_size)
-                        .weight(font_weight)
-                        .color(resolve_color(colors.foreground));
-
-                    if label {
-                        let label_widget = Text::new(module.label().to_uppercase())
-                            .font(&font.path_or_name)
-                            .size(font_size)
-                            .weight(font_weight)
-                            .color(resolve_color(colors.foreground));
-
-                        Flow::new(
-                            axis,
-                            vec![
-                                Box::new(label_widget) as Box<dyn Widget>,
-                                Box::new(bar_widget) as Box<dyn Widget>,
-                                Box::new(pct_widget) as Box<dyn Widget>,
-                            ],
-                        )
-                        .gap(8.0)
-                        .align(Align::Center)
-                        .into_widget()
-                    } else {
-                        Flow::new(
-                            axis,
-                            vec![
-                                Box::new(bar_widget) as Box<dyn Widget>,
-                                Box::new(pct_widget) as Box<dyn Widget>,
-                            ],
-                        )
-                        .gap(6.0)
-                        .align(Align::Center)
-                        .into_widget()
-                    }
-                }
-            }
+            Box::new(rect) as Box<dyn Widget>
         }
     }
 }

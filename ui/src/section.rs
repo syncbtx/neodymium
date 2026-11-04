@@ -12,7 +12,13 @@ use crate::{
     color, module,
 };
 
-pub fn view(section: &BarSection, parent: &Bar, palette: &Palette, opacity: u8) -> Box<dyn Widget> {
+pub fn view(
+    section: &BarSection,
+    parent: &Bar,
+    palette: &Palette,
+    phase: f32,
+    opacity: u8,
+) -> Box<dyn Widget> {
     let axis = Axis::of(parent.edge);
     let font = section
         .font
@@ -84,6 +90,7 @@ pub fn view(section: &BarSection, parent: &Bar, palette: &Palette, opacity: u8) 
                 &font,
                 9.0,
                 700,
+                phase,
                 palette,
             )
         })

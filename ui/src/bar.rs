@@ -1,13 +1,13 @@
 use amane::{
     Align, Color, Horizontal, InputArea, LayerWindow, Monitor, Padding, Rectangle, Service, Size,
-    Vertical, WindowSize,
+    Stack, Vertical, Widget, WindowSize,
 };
 use model::{AttachmentMode, MainAxisSize, bar::Bar};
 
 use crate::{
     axis::{Axis, Flow},
-    section,
-    services::Theme,
+    backdrop, section,
+    services::{self, Theme},
 };
 
 fn resolve_layer(layer: model::Layer) -> amane::Layer {
@@ -159,10 +159,12 @@ pub fn view(bar: &Bar, monitor: &Monitor) -> LayerWindow {
         crate::color::resolve_color_with_alpha(palette.surface, eff)
     };
 
+    let phase = services::motion::phase();
+
     let sections = bar
         .sections
         .iter()
-        .map(|sec| section::view(sec, bar, palette, opacity))
+        .map(|sec| section::view(sec, bar, palette, phase, opacity))
         .collect();
 
     let zone = if bar.exclusive_zone {
@@ -257,8 +259,35 @@ pub fn view(bar: &Bar, monitor: &Monitor) -> LayerWindow {
         .radius(bar.border_radius as f32);
     let bar_rect = container.attach_to(bar_rect);
 
+    let backdrop = bar.backdrop.clone();
+
     let (env_w, env_h) = axis.size(envelope_main, Size::Fixed(window_cross));
     let (env_align_h, env_align_v) = axis.point(main_align, Align::Center);
+
+    let backdrop_rect = Rectangle::new()
+        .width(env_w)
+        .height(env_h)
+        .padding(Padding {
+            top: insets.top,
+            bottom: insets.bottom,
+            left: insets.left,
+            right: insets.right,
+        })
+        .align_child(env_align_h, env_align_v)
+        .fill(Color::TRANSPARENT)
+        .child(backdrop::view(
+            backdrop,
+            monitor_main,
+            bar.section_cross_axis_size as f32,
+            palette,
+            phase,
+        ));
+
+    let stack = Stack::new(vec![
+        Box::new(backdrop_rect) as Box<dyn Widget>,
+        Box::new(bar_rect) as Box<dyn Widget>,
+    ]);
+
     let outer_envelope = Rectangle::new()
         .width(env_w)
         .height(env_h)
@@ -270,7 +299,7 @@ pub fn view(bar: &Bar, monitor: &Monitor) -> LayerWindow {
         })
         .align_child(env_align_h, env_align_v)
         .fill(Color::TRANSPARENT)
-        .child(bar_rect);
+        .child(stack);
 
     let input_area = match (spanning, bar_main_px) {
         (true, Some(len)) => {
