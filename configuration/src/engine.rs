@@ -1,72 +1,227 @@
-use std::fs;
-
+use std::collections::BTreeSet;
+use fontconfig::{Fontconfig, ObjectSet, Pattern, list_fonts, FC_FAMILY};
 use schemars::schema_for;
+use serde_json::{Map, Value};
 
 use crate::{
-    domain::{ConfigDomain, bars::BarsConfig, core::CoreConfig, general::GeneralConfig},
-    resolution::{self, fallback_dir, preferences_dir, preferences_file, schema_dir, schema_file},
+    NEODYMIUM_CACHE_DIR, NEODYMIUM_CONFIG_DIR, NEODYMIUM_DEFAULT_SETTINGS_PATH,
+    NEODYMIUM_SCHEMA_PATH, NEODYMIUM_STATE_DIR, NEODYMIUM_USER_SETTINGS_PATH,
+    settings::AppSettings, validate::Sanitize,
 };
 
-#[derive(Debug)]
-pub struct Settings {
-    pub core: CoreConfig,
-    pub edited: CoreConfig,
-}
+pub struct SettingsEngine;
 
-#[derive(Debug)]
-pub struct ConfigEngine {
-    pub core_config: CoreConfig,
-}
+impl SettingsEngine {
+    pub fn init() -> Result<(), String> {
+        std::fs::create_dir_all(&*NEODYMIUM_CONFIG_DIR).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(&*NEODYMIUM_STATE_DIR).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(&*NEODYMIUM_CACHE_DIR).map_err(|e| e.to_string())?;
 
-impl Default for ConfigEngine {
-    fn default() -> Self {
-        Self {
-            core_config: Default::default(),
+        Self::export_schema()
+    }
+
+    pub fn list_system_fonts() -> Vec<String> {
+        let mut families = BTreeSet::new();
+
+        if let Some(fc) = Fontconfig::new() {
+            if let Ok(pattern) = Pattern::new(&fc) {
+                let mut os = ObjectSet::new(&fc).ok();
+                if let Some(ref mut os) = os {
+                    let _ = os.add(FC_FAMILY);
+                }
+                if let Ok(fontset) = list_fonts(&pattern, os.as_ref()) {
+                    for pat in fontset.iter() {
+                        if let Ok(family) = pat.get_string(FC_FAMILY) {
+                            let trimmed = family.trim();
+                            if !trimmed.is_empty() {
+                                families.insert(trimmed.to_string());
+                            }
+                        }
+                    }
+                }
+            }
         }
-    }
-}
 
-impl ConfigEngine {
-    pub fn init() -> Result<Self, String> {
-        std::fs::create_dir_all(schema_dir()).map_err(|e| e.to_string())?;
-        std::fs::create_dir_all(fallback_dir()).map_err(|e| e.to_string())?;
-        std::fs::create_dir_all(preferences_dir()).map_err(|e| e.to_string())?;
-
-        let core_config = CoreConfig::aggregate()?;
-        Ok(Self { core_config })
+        families.into_iter().collect()
     }
 
-    pub fn export_schemas() -> Result<(), String> {
-        Self::export_schema::<BarsConfig>()?;
-        Self::export_schema::<GeneralConfig>()?;
-        println!("\x1b[32mconfig schemas exported\x1b[0m");
-        Ok(())
-    }
+    pub fn export_schema() -> Result<(), String> {
+        let mut schema =
+            serde_json::to_value(schema_for!(AppSettings)).map_err(|e| e.to_string())?;
 
-    fn export_schema<D: ConfigDomain>() -> Result<(), String> {
-        let mut schema = serde_json::to_value(schema_for!(D)).map_err(|e| e.to_string())?;
         if let Some(props) = schema.get_mut("properties").and_then(|p| p.as_object_mut()) {
             props.insert(
                 "$schema".to_string(),
                 serde_json::json!({
                     "type": "string",
-                    "description": "Path or URL of this schema, for editors. Ignored by Neodymium."
+                    "description": "Path or URL to the schema file for editor validation."
                 }),
             );
-        };
+        }
+
+        let fonts = Self::list_system_fonts();
+        if !fonts.is_empty() {
+            if let Some(font_prop) = schema.pointer_mut("/$defs/Font/properties/pathOrName") {
+                *font_prop = serde_json::json!({
+                    "anyOf": [
+                        {
+                            "type": "string",
+                            "enum": fonts
+                        },
+                        {
+                            "type": "string",
+                            "pattern": r"^(/|~|\./|sans-serif|monospace|serif).*"
+                        }
+                    ]
+                });
+            }
+        }
+
         let pretty = serde_json::to_string_pretty(&schema).map_err(|e| e.to_string())?;
-        std::fs::write(schema_file(D::SCHEMA_NAME), pretty).map_err(|e| e.to_string())
+        std::fs::write(&*NEODYMIUM_SCHEMA_PATH, pretty).map_err(|e| e.to_string())
     }
 
-    pub fn save_changes<D: ConfigDomain>(&self, updated: D) -> Result<(), String> {
-        let base = serde_json::to_value(D::default()).map_err(|e| e.to_string())?;
-        let target = serde_json::to_value(updated).map_err(|e| e.to_string())?;
+    pub fn load() -> AppSettings {
+        let mut base =
+            serde_json::to_value(AppSettings::default()).unwrap_or(Value::Object(Map::new()));
 
-        let sparse = resolution::diff(&base, &target)
-            .unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
+        let _ = Self::read_layer(&NEODYMIUM_DEFAULT_SETTINGS_PATH, &mut base);
+        let _ = Self::read_layer(&NEODYMIUM_USER_SETTINGS_PATH, &mut base);
 
-        let pretty = serde_json::to_string_pretty(&sparse).map_err(|e| e.to_string())?;
-        let path = preferences_file(D::SCHEMA_NAME);
-        fs::write(path, pretty).map_err(|e| e.to_string())
+        let mut settings: AppSettings =
+            serde_json::from_value(base).unwrap_or_else(|_| AppSettings::default());
+        settings.sanitize();
+        settings
+    }
+
+    fn read_layer(path: &std::path::Path, base: &mut Value) -> Result<(), String> {
+        if !path.exists() {
+            return Ok(());
+        }
+        let json = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        if json.trim().is_empty() {
+            return Err(format!("{}: empty (mid-write?)", path.display()));
+        }
+        let overlay = Self::parse_json(&json).map_err(|e| format!("{}: {e}", path.display()))?;
+        Self::merge(base, &overlay);
+        Ok(())
+    }
+
+    pub fn reload() -> Result<AppSettings, String> {
+        let mut base = serde_json::to_value(AppSettings::default()).map_err(|e| e.to_string())?;
+        Self::read_layer(&NEODYMIUM_DEFAULT_SETTINGS_PATH, &mut base)?;
+        Self::read_layer(&NEODYMIUM_USER_SETTINGS_PATH, &mut base)?;
+        let mut settings: AppSettings = serde_json::from_value(base).map_err(|e| e.to_string())?;
+        settings.sanitize();
+        Ok(settings)
+    }
+
+    pub fn parse_json(json: &str) -> Result<Value, serde_json::Error> {
+        let stripped = json_comments::StripComments::new(json.as_bytes());
+        let mut value: Value = serde_json::from_reader(stripped)?;
+        if let Value::Object(ref mut map) = value {
+            map.remove("$schema");
+        }
+        Ok(value)
+    }
+
+    pub fn merge(base: &mut Value, overlay: &Value) {
+        match (base, overlay) {
+            (Value::Object(b), Value::Object(o)) => {
+                for (k, v) in o {
+                    match b.get_mut(k) {
+                        Some(slot) => Self::merge(slot, v),
+                        None => {
+                            b.insert(k.clone(), v.clone());
+                        }
+                    }
+                }
+            }
+
+            (slot, value) => *slot = value.clone(),
+        }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::settings::section::SectionSettings;
+
+    #[test]
+    fn test_export_schema() {
+        SettingsEngine::init().unwrap();
+        let contents = std::fs::read_to_string(&*NEODYMIUM_SCHEMA_PATH).unwrap();
+        let schema: serde_json::Value = serde_json::from_str(&contents).unwrap();
+        let enum_values = schema
+            .pointer("/$defs/Font/properties/pathOrName/anyOf/0/enum")
+            .and_then(|v| v.as_array())
+            .unwrap();
+        assert!(!enum_values.is_empty());
+    }
+
+    #[test]
+    fn test_font_fallback_hierarchy() {
+        use model::{Font, bar::module::Module};
+        let mut settings = AppSettings::default();
+        settings.general.font.path_or_name = "GeneralFont".to_string();
+
+        let dummy_section = |font: Option<Font>| SectionSettings {
+            font,
+            modules: vec![Module::Divider],
+            ..Default::default()
+        };
+
+        settings.bars.top.font = None;
+        settings.bars.top.sections = vec![dummy_section(None)];
+
+        settings.bars.bottom.font = Some(Font {
+            path_or_name: "BarFont".to_string(),
+            ..Default::default()
+        });
+        settings.bars.bottom.sections = vec![
+            dummy_section(None),
+            dummy_section(Some(Font {
+                path_or_name: "SectionFont".to_string(),
+                ..Default::default()
+            })),
+        ];
+
+        settings.sanitize();
+
+        assert_eq!(
+            settings.bars.top.font.as_ref().unwrap().path_or_name,
+            "GeneralFont"
+        );
+        assert_eq!(
+            settings.bars.top.sections[0]
+                .font
+                .as_ref()
+                .unwrap()
+                .path_or_name,
+            "GeneralFont"
+        );
+
+        assert_eq!(
+            settings.bars.bottom.font.as_ref().unwrap().path_or_name,
+            "BarFont"
+        );
+        assert_eq!(
+            settings.bars.bottom.sections[0]
+                .font
+                .as_ref()
+                .unwrap()
+                .path_or_name,
+            "BarFont"
+        );
+        assert_eq!(
+            settings.bars.bottom.sections[1]
+                .font
+                .as_ref()
+                .unwrap()
+                .path_or_name,
+            "SectionFont"
+        );
+    }
+}
+

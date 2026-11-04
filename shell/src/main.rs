@@ -1,94 +1,127 @@
-use std::{ffi::OsStr, os::unix::process::CommandExt, process::Command, time::Duration};
+use amane::{LayerWindow, Monitor, Service};
+use configuration::{
+    NEODYMIUM_ACTIVE_WALLPAPER, NEODYMIUM_USER_SETTINGS_PATH, SERPANTINUM_WALLPAPER,
+    engine::SettingsEngine, resolve::Resolve, settings::AppSettings,
+};
+use std::path::Path;
 
-use amane::App;
-use configuration::engine::ConfigEngine;
-use inotify::{Inotify, WatchMask};
-use model::bar::Bars;
+fn resolve_active_wallpaper() -> Option<&'static Path> {
+    if NEODYMIUM_ACTIVE_WALLPAPER.exists() {
+        Some(NEODYMIUM_ACTIVE_WALLPAPER.as_path())
+    } else if SERPANTINUM_WALLPAPER.exists() {
+        Some(SERPANTINUM_WALLPAPER.as_path())
+    } else {
+        None
+    }
+}
+
+#[derive(Debug)]
+pub struct ShellState {
+    pub settings: AppSettings,
+}
+
+impl amane::Service for ShellState {
+    fn new() -> Self {
+        let _ = SettingsEngine::init();
+        let settings = SettingsEngine::load();
+        let wp_path = resolve_active_wallpaper();
+
+        // At startup the UI thread hasn't started yet, so it's safe to do
+        // all the slow work here before touching the write lock.
+        let pre_configured = ui::services::pre_configured_theme(settings.theme.pre_configured);
+        let seed_palette = ui::services::generate_from_seed(&settings.theme.seed_color);
+        let wp_palette = wp_path
+            .filter(|p| p.exists())
+            .and_then(|p| ui::services::generate_from_wallpaper(p, &settings.theme.wallpaper));
+
+        {
+            let mut theme = ui::services::Theme::write();
+            theme.set_meta(&settings.theme);
+            theme.set_pre_configured(pre_configured);
+            if let Some(p) = seed_palette {
+                theme.set_seed_color(p);
+            }
+            if let Some(p) = wp_palette {
+                theme.set_wallpaper(p);
+            }
+        }
+
+        Self { settings }
+    }
+
+    fn listen() {
+        let path = NEODYMIUM_USER_SETTINGS_PATH.to_string_lossy().to_string();
+        eprintln!("watching {path}");
+
+        for _ in amane::watch_file(&path) {
+            match SettingsEngine::reload() {
+                Ok(settings) => {
+                    let wp_path = resolve_active_wallpaper();
+
+                    let pre_configured =
+                        ui::services::pre_configured_theme(settings.theme.pre_configured);
+
+                    let seed_palette = ui::services::generate_from_seed(&settings.theme.seed_color);
+
+                    let wp_palette = wp_path.filter(|p| p.exists()).and_then(|p| {
+                        ui::services::generate_from_wallpaper(p, &settings.theme.wallpaper)
+                    });
+
+                    {
+                        let mut theme = ui::services::Theme::write();
+                        theme.set_meta(&settings.theme);
+                        theme.set_pre_configured(pre_configured);
+                        if let Some(p) = seed_palette {
+                            theme.set_seed_color(p);
+                        }
+                        if let Some(p) = wp_palette {
+                            theme.set_wallpaper(p);
+                        }
+                    }
+
+                    ShellState::write().settings = settings;
+                    println!("reload successful");
+                }
+                Err(e) => eprintln!("reload failed: {e}"),
+            }
+        }
+    }
+}
+
+fn top(monitor: &Monitor) -> LayerWindow {
+    ui::bar::view(&ShellState::read().settings.bars.top.resolve(), monitor)
+}
+
+fn right(monitor: &Monitor) -> LayerWindow {
+    ui::bar::view(&ShellState::read().settings.bars.right.resolve(), monitor)
+}
+
+fn bottom(monitor: &Monitor) -> LayerWindow {
+    ui::bar::view(&ShellState::read().settings.bars.bottom.resolve(), monitor)
+}
+
+fn left(monitor: &Monitor) -> LayerWindow {
+    ui::bar::view(&ShellState::read().settings.bars.left.resolve(), monitor)
+}
 
 fn main() -> Result<(), String> {
-    let engine = ConfigEngine::init()?;
-    let bars = Bars::from_config(&engine.core_config.bars);
-    let general = &engine.core_config.general;
+    let _ = SettingsEngine::init();
 
-    // Must happen BEFORE the watcher starts: it writes into the watched
-    // directory and would otherwise trigger a reload loop.
-    if let Err(e) = ConfigEngine::export_schemas() {
-        eprintln!("failed to export schemas: {e}");
-    }
+    let (font, scc, factor) = {
+        let state = ShellState::read();
+        let font = state.settings.general.font.path_or_name.clone();
+        let scc = state.settings.bars.resolve().screen_corner_claimer;
+        let factor = state.settings.general.scale.clamp(0.4, 2.0);
+        (font, scc, factor)
+    };
 
-    ui::bar::init(bars);
-    let views = ui::bar::views();
+    let mut app = amane::App::new().font(&font).scale_factor(factor);
 
-    if views.is_empty() {
-        eprintln!("No bars enabled in configuration.");
-        return Ok(());
-    }
-
-    let mut app = App::new().font(&general.font.path_or_name);
-    for view in views {
+    for view in ui::bars::ordered(top, right, bottom, left, scc) {
         app = app.window_per_monitor(view);
     }
 
-    spawn_config_watcher();
-
     app.run();
+
     Ok(())
-}
-
-/// Only real JSON config files trigger a reload. Generated schemas,
-/// dotfiles, and editor temp/swap files are ignored.
-fn is_config_file(name: &OsStr) -> bool {
-    let Some(name) = name.to_str() else {
-        return false;
-    };
-    name.ends_with(".json") && !name.ends_with(".schema.json") && !name.starts_with('.')
-}
-
-fn spawn_config_watcher() {
-    std::thread::spawn(|| {
-        if let Err(e) = watch_loop() {
-            eprintln!("config watcher stopped: {e}");
-        }
-    });
-}
-
-fn watch_loop() -> std::io::Result<()> {
-    let mut ino = Inotify::init()?;
-    ino.watches().add(
-        configuration::resolution::preferences_dir(),
-        // Editors usually write a temp file and rename it over the target,
-        // which shows up as MOVED_TO/CREATE rather than MODIFY.
-        WatchMask::CLOSE_WRITE | WatchMask::MOVED_TO | WatchMask::CREATE,
-    )?;
-
-    let mut buf = [0u8; 4096];
-    loop {
-        let hit = ino
-            .read_events_blocking(&mut buf)?
-            .any(|e| e.name.map_or(false, is_config_file));
-        if !hit {
-            continue;
-        }
-
-        // Debounce: one save often fires several events.
-        std::thread::sleep(Duration::from_millis(75));
-
-        // Validate first. A typo keeps the running shell alive.
-        match ConfigEngine::init() {
-            Ok(_) => restart(),
-            Err(e) => eprintln!("config reload failed, keeping current config: {e}"),
-        }
-    }
-}
-
-/// Replace the current process with a fresh copy of itself.
-/// On success this never returns.
-fn restart() {
-    match std::env::current_exe() {
-        Ok(exe) => {
-            let err = Command::new(exe).args(std::env::args_os().skip(1)).exec();
-            eprintln!("restart failed: {err}");
-        }
-        Err(e) => eprintln!("cannot locate own executable: {e}"),
-    }
 }

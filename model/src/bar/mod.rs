@@ -1,52 +1,34 @@
 pub mod module;
 pub mod section;
 
-use std::num::NonZeroU32;
-
-use configuration::{
-    domain::{
-        bars::{
-            AttachmentMode, BarBackdrop, BarBlend, BarConfig, BarLayer, BarsConfig, MajorAxisSize,
-            ScreenCornerClaimer,
-        },
-        general::Font,
-    },
-    shared::{Alpha, Border, Edge},
+use crate::{
+    Alpha, Anchor, AttachmentMode, Backdrop, BarBlend, Border, Edge, Font, Insets, Justify, Layer,
+    MainAxisSize, ScreenCornerClaimer, bar::section::BarSection,
 };
-use hex_color::HexColor;
-
-use crate::bar::section::BarSection;
-
-#[derive(Debug)]
-pub struct FourSideData {
-    pub top: u32,
-    pub right: u32,
-    pub bottom: u32,
-    pub left: u32,
-}
 
 #[derive(Debug)]
 pub struct Bar {
     pub enabled: bool,
     pub exclusive_zone: bool,
     pub edge: Edge,
-    pub layer: BarLayer,
+    pub anchor: Anchor,
+    pub layer: Layer,
+    pub attachment_mode: AttachmentMode,
     pub islands: bool,
     pub autohide: bool,
+    pub spacing: u32,
     pub border: Border,
     pub border_radius: u32,
-    pub section_border_radius: u32,
-    pub backdrop: BarBackdrop,
-    pub background: HexColor,
-    pub foreground: HexColor,
-    pub contrast: bool,
+    pub backdrop: Backdrop,
     pub opacity: Alpha,
-    pub attachment_mode: AttachmentMode,
-    pub major_axis_size: MajorAxisSize,
-    pub minor_axis_size: NonZeroU32,
-    pub margin: FourSideData,
-    pub padding: FourSideData,
+    pub main_axis_size: MainAxisSize,
+    pub margin: Insets<u32>,
+    pub padding: Insets<u32>,
     pub font: Option<Font>,
+    pub section_cross_axis_size: u32,
+    pub section_padding: Insets<u32>,
+    pub section_border_radius: u32,
+    pub sections_justify: Justify,
     pub sections: Vec<BarSection>,
 }
 
@@ -54,66 +36,48 @@ impl Bar {
     pub fn is_horizontal(edge: Edge) -> bool {
         matches!(edge, Edge::Top | Edge::Bottom)
     }
+}
 
-    pub fn from_config(config: &BarConfig) -> Self {
-        let mut sections = Vec::new();
-        for cfg in config.sections.iter() {
-            sections.push(BarSection::from_config(&cfg));
-        }
-        let is_horizontal = Bar::is_horizontal(config.edge);
-        let margin = if is_horizontal {
-            FourSideData {
-                top: config.minor_axis_margin,
-                right: config.major_axis_margin,
-                bottom: config.minor_axis_margin,
-                left: config.major_axis_margin,
-            }
-        } else {
-            FourSideData {
-                top: config.major_axis_margin,
-                right: config.minor_axis_margin,
-                bottom: config.major_axis_margin,
-                left: config.minor_axis_margin,
-            }
-        };
-        let padding = if is_horizontal {
-            FourSideData {
-                top: config.minor_axis_padding,
-                right: config.major_axis_padding,
-                bottom: config.minor_axis_padding,
-                left: config.major_axis_padding,
-            }
-        } else {
-            FourSideData {
-                top: config.major_axis_padding,
-                right: config.minor_axis_padding,
-                bottom: config.major_axis_padding,
-                left: config.minor_axis_padding,
-            }
-        };
-
+impl Default for Bar {
+    fn default() -> Self {
         Self {
-            enabled: config.enabled,
+            enabled: false,
             exclusive_zone: true,
-            edge: config.edge,
-            layer: config.layer,
-            islands: config.islands,
-            autohide: config.autohide,
-            border: config.border,
-            border_radius: config.border_radius,
-            section_border_radius: config.section_border_radius,
-            backdrop: config.backdrop,
-            background: config.background,
-            foreground: config.foreground,
-            contrast: config.contrast,
-            opacity: config.opacity,
-            attachment_mode: config.attachment_mode,
-            major_axis_size: config.major_axis_size,
-            minor_axis_size: config.minor_axis_size,
-            margin,
-            padding,
+            edge: Edge::default(),
+            anchor: Anchor::default(),
+            layer: Layer::default(),
+            islands: true,
+            autohide: false,
+            spacing: 8,
+            border: Border::default(),
+            border_radius: 8,
+            section_border_radius: 8,
+            backdrop: Backdrop::None,
+            opacity: Alpha::default(),
+            attachment_mode: AttachmentMode::default(),
+            main_axis_size: MainAxisSize::default(),
+            section_cross_axis_size: 8,
+            margin: Insets {
+                top: 8,
+                right: 8,
+                bottom: 8,
+                left: 8,
+            },
+            padding: Insets {
+                top: 8,
+                right: 8,
+                bottom: 8,
+                left: 8,
+            },
+            section_padding: Insets {
+                top: 8,
+                right: 8,
+                bottom: 8,
+                left: 8,
+            },
             font: None,
-            sections,
+            sections_justify: Justify::default(),
+            sections: Vec::new(),
         }
     }
 }
@@ -128,15 +92,27 @@ pub struct Bars {
     pub blend: BarBlend,
 }
 
-impl Bars {
-    pub fn from_config(config: &BarsConfig) -> Self {
-        Self {
-            top: Bar::from_config(&config.top),
-            right: Bar::from_config(&config.right),
-            bottom: Bar::from_config(&config.bottom),
-            left: Bar::from_config(&config.left),
-            screen_corner_claimer: config.screen_corner_claimer,
-            blend: config.blend,
-        }
+impl IntoIterator for Bars {
+    type Item = Bar;
+
+    type IntoIter = std::array::IntoIter<Bar, 4>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        [self.top, self.right, self.bottom, self.left].into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a mut Bars {
+    type Item = &'a mut Bar;
+    type IntoIter = std::array::IntoIter<&'a mut Bar, 4>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        [
+            &mut self.top,
+            &mut self.right,
+            &mut self.bottom,
+            &mut self.left,
+        ]
+        .into_iter()
     }
 }
