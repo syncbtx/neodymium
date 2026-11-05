@@ -143,7 +143,19 @@ fn trim_inner_padding(edge: model::Edge, padding: Padding) -> Padding {
 
 pub fn view(bar: &Bar, monitor: &Monitor) -> LayerWindow {
     let axis = Axis::of(bar.edge);
-    let (vertical, horizontal) = resolve_anchors(bar);
+    // Exclusive-zone surfaces must be pinned to their edge. bar.anchor only controls
+    // the content alignment within the envelope — the Wayland anchor is always the edge.
+    // Floating bars have no zone and can use the user-chosen anchor for physical placement.
+    let (vertical, horizontal) = if bar.exclusive_zone {
+        match bar.edge {
+            model::Edge::Top => (Vertical::Top, Horizontal::Middle),
+            model::Edge::Bottom => (Vertical::Bottom, Horizontal::Middle),
+            model::Edge::Left => (Vertical::Middle, Horizontal::Left),
+            model::Edge::Right => (Vertical::Middle, Horizontal::Right),
+        }
+    } else {
+        resolve_anchors(bar)
+    };
     let is_attached = matches!(bar.attachment_mode, AttachmentMode::Attached { .. });
 
     let theme = Theme::read();
@@ -262,9 +274,9 @@ pub fn view(bar: &Bar, monitor: &Monitor) -> LayerWindow {
     let backdrop = bar.backdrop.clone();
 
     let (env_w, env_h) = axis.size(envelope_main, Size::Fixed(window_cross));
-    let (env_align_h, env_align_v) = axis.point(main_align, Align::Center);
+    let (env_align_h, env_align_v) = axis.to_hv(main_align, Align::Center);
 
-    let backdrop_rect = Rectangle::new()
+    let bar_envelope = Rectangle::new()
         .width(env_w)
         .height(env_h)
         .padding(Padding {
@@ -275,35 +287,11 @@ pub fn view(bar: &Bar, monitor: &Monitor) -> LayerWindow {
         })
         .align_child(env_align_h, env_align_v)
         .fill(Color::TRANSPARENT)
-        .child(backdrop::view(
-            backdrop,
-            monitor_main,
-            bar.section_cross_axis_size as f32,
-            palette,
-            phase,
-        ));
-
-    let stack = Stack::new(vec![
-        Box::new(backdrop_rect) as Box<dyn Widget>,
-        Box::new(bar_rect) as Box<dyn Widget>,
-    ]);
-
-    let outer_envelope = Rectangle::new()
-        .width(env_w)
-        .height(env_h)
-        .padding(Padding {
-            top: insets.top,
-            bottom: insets.bottom,
-            left: insets.left,
-            right: insets.right,
-        })
-        .align_child(env_align_h, env_align_v)
-        .fill(Color::TRANSPARENT)
-        .child(stack);
+        .child(bar_rect);
 
     let input_area = match (spanning, bar_main_px) {
         (true, Some(len)) => {
-            let (x, y) = axis.point(
+            let (x, y) = axis.to_hv(
                 main_axis_offset(bar.anchor, monitor_main, len) as i32,
                 insets.cross_start(axis) as i32,
             );
@@ -333,5 +321,35 @@ pub fn view(bar: &Bar, monitor: &Monitor) -> LayerWindow {
         None => window,
     };
 
-    window.child(outer_envelope)
+    if backdrop != model::Backdrop::None {
+        let main = match bar_main_px {
+            Some(px) => px - bar_padding_main,
+            None => monitor_main - bar_padding_main,
+        };
+        let backdrop_rect = Rectangle::new()
+            .width(env_w)
+            .height(env_h)
+            .padding(Padding {
+                top: insets.top,
+                bottom: insets.bottom,
+                left: insets.left,
+                right: insets.right,
+            })
+            .align_child(env_align_h, env_align_v)
+            .fill(Color::TRANSPARENT)
+            .child(backdrop::view(
+                backdrop,
+                main,
+                bar.section_cross_axis_size as f32,
+                palette,
+                phase,
+            ));
+
+        window.child(Stack::new(vec![
+            Box::new(backdrop_rect) as Box<dyn Widget>,
+            Box::new(bar_envelope) as Box<dyn Widget>,
+        ]))
+    } else {
+        window.child(bar_envelope)
+    }
 }

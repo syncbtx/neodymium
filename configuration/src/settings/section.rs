@@ -8,7 +8,6 @@ use model::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::resolve::Resolve;
 
 #[derive(Debug, Serialize, Clone, Default, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
@@ -23,15 +22,13 @@ pub struct SectionSettings {
     pub modules: Vec<Module>,
 }
 
-impl Resolve for SectionSettings {
-    type Output = BarSection;
-
-    fn resolve(&self) -> Self::Output {
+impl SectionSettings {
+    pub fn resolve_with_fallback(&self, fallback_padding: Insets<u32>) -> BarSection {
         BarSection {
             tint: self.tint,
             opacity: self.opacity,
             spacing: self.spacing,
-            padding: self.padding,
+            padding: self.padding.unwrap_or(fallback_padding),
             border: self.border,
             border_radius: self.border_radius,
             font: self.font.clone(),

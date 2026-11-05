@@ -1,4 +1,4 @@
-use amane::{Canvas, Cap, Circle, Color, Path, Rectangle, Shape, shapes};
+use amane::{Color, Rectangle};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ProgressMode {
@@ -20,145 +20,6 @@ impl From<model::bar::module::SystemModuleStyle> for ProgressMode {
     }
 }
 
-/// A wavy arc as raw cubics, in canvas coordinates.
-pub struct Curve {
-    pub start: (f32, f32),
-    /// `[x1, y1, x2, y2, x, y]` per segment, same order as `cubic_to`.
-    pub cubics: Vec<[f32; 6]>,
-}
-
-/// Centre line of a wavy arc.
-///
-/// - `radius`: radius of the mean circle
-/// - `amplitude`: how far the line swings in and out of it
-/// - `waves`: full waves per turn (constant wavelength; whole numbers close
-///   up neatly at 100%)
-/// - `phase`: radians; animate it to make the ring flow
-/// - `start`, `sweep`: degrees; a negative sweep goes counterclockwise
-pub fn wavy_curve(
-    cx: f32,
-    cy: f32,
-    radius: f32,
-    amplitude: f32,
-    waves: f32,
-    phase: f32,
-    start: f32,
-    sweep: f32,
-) -> Curve {
-    let a0 = start.to_radians();
-    let span = sweep.to_radians();
-
-    // radius and its slope at angle `a` (radians), wave phase measured from `a0`
-    let rho = |a: f32| radius + amplitude * (waves * (a - a0) + phase).sin();
-    let drho = |a: f32| amplitude * waves * (waves * (a - a0) + phase).cos();
-
-    // point and velocity (per radian of angle) at `a`, y grows downward
-    let at = |a: f32| {
-        let (s, c) = a.sin_cos();
-        let r = rho(a);
-        let dr = drho(a);
-        let p = (cx + r * s, cy - r * c);
-        let v = (dr * s + r * c, -dr * c + r * s);
-        (p, v)
-    };
-
-    // 8 segments per wave keeps the Hermite fit well under a pixel
-    let per_turn = (waves.abs() * 8.0).max(16.0);
-    let steps = ((span.abs() / std::f32::consts::TAU * per_turn).ceil() as usize).max(4);
-    let step = span / steps as f32;
-
-    let (first, _) = at(a0);
-    let mut cubics = Vec::with_capacity(steps);
-
-    for i in 0..steps {
-        let from = a0 + step * i as f32;
-        let to = from + step;
-        let (p0, v0) = at(from);
-        let (p1, v1) = at(to);
-        let k = step / 3.0;
-
-        cubics.push([
-            p0.0 + v0.0 * k,
-            p0.1 + v0.1 * k,
-            p1.0 - v1.0 * k,
-            p1.1 - v1.1 * k,
-            p1.0,
-            p1.1,
-        ]);
-    }
-
-    Curve {
-        start: first,
-        cubics,
-    }
-}
-
-/// Centre line of a horizontal wavy line from `x0` to `x0 + length`.
-///
-/// The wave is tied to x, so growing the line never squeezes the waves.
-/// `wavelength` is in pixels, `phase` in radians (animate it to make it flow).
-pub fn wavy_line_curve(
-    x0: f32,
-    cy: f32,
-    length: f32,
-    amplitude: f32,
-    wavelength: f32,
-    phase: f32,
-) -> Curve {
-    let k = std::f32::consts::TAU / wavelength;
-
-    let at = |x: f32| {
-        let arg = k * (x - x0) + phase;
-        ((x, cy + amplitude * arg.sin()), amplitude * k * arg.cos())
-    };
-
-    // 8 segments per wavelength
-    let steps = ((length / wavelength * 8.0).ceil() as usize).max(2);
-    let step = length / steps as f32;
-
-    let (first, _) = at(x0);
-    let mut cubics = Vec::with_capacity(steps);
-
-    for i in 0..steps {
-        let from = x0 + step * i as f32;
-        let to = from + step;
-        let (p0, d0) = at(from);
-        let (p1, d1) = at(to);
-        let h = step / 3.0;
-
-        cubics.push([p0.0 + h, p0.1 + d0 * h, p1.0 - h, p1.1 - d1 * h, p1.0, p1.1]);
-    }
-
-    Curve {
-        start: first,
-        cubics,
-    }
-}
-
-// ---- amane glue (everything above is plain math) ----
-
-/// The wavy arc as an amane `Path`. Add `.stroke(..)` and `.cap(Cap::Round)`.
-pub fn wavy_arc(
-    cx: f32,
-    cy: f32,
-    radius: f32,
-    amplitude: f32,
-    waves: f32,
-    phase: f32,
-    start: f32,
-    sweep: f32,
-) -> Path {
-    let curve = wavy_curve(cx, cy, radius, amplitude, waves, phase, start, sweep);
-
-    let mut path = Path::new().move_to(curve.start.0, curve.start.1);
-
-    for c in curve.cubics {
-        path = path.cubic_to(c[0], c[1], c[2], c[3], c[4], c[5]);
-    }
-
-    path
-}
-
 #[derive(Clone, Copy)]
 pub struct Style {
     pub size: f32,
@@ -173,43 +34,6 @@ pub struct Style {
     pub mode: ProgressMode,
 }
 
-/// A wavy progress ring, starting at 12 o'clock. `progress` is 0.0..=1.0,
-/// `phase` is the wave offset in radians.
-pub fn ring_(style: Style, progress: f32, phase: f32) -> Canvas {
-    let size = style.size;
-    let middle = size / 2.0;
-
-    // keep the whole stroke inside the canvas
-    let radius = if style.amplitude == 0.0 {
-        middle - style.thickness / 2.0
-    } else {
-        middle - style.amplitude + style.thickness / 2.0
-    };
-
-    let sweep = 360.0 * progress.clamp(0.0, 1.0);
-
-    let mut layers = shapes![Circle::new().fill(style.track)];
-
-    if sweep > 0.5 {
-        layers.push(Box::new(
-            wavy_arc(
-                middle,
-                middle,
-                radius,
-                style.amplitude,
-                style.freq,
-                phase,
-                0.0,
-                sweep,
-            )
-            .stroke(style.thickness, style.color)
-            .cap(Cap::Round),
-        ));
-    }
-
-    Canvas::new().width(size).height(size).shapes(layers)
-}
-
 pub fn color_to_vec4(c: Color) -> [f32; 4] {
     let r = c.red() as f32 / 255.0;
     let g = c.green() as f32 / 255.0;
@@ -221,9 +45,9 @@ pub fn color_to_vec4(c: Color) -> [f32; 4] {
 pub fn progress(style: &Style, current: f32, phase: f32) -> Rectangle {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/shaders/progress.wgsl");
 
-    let amplitude = (current * 1.35).max(1.0);
+    let amplitude = (current * 0.9).max(0.9);
 
-    let freq = 8.0 * 1.0 / current.max(0.75);
+    let freq = 4.5 * 1.0 / current.min(0.5);
 
     let mode = match style.mode {
         ProgressMode::Ring | ProgressMode::WaveyRing => 0.0,

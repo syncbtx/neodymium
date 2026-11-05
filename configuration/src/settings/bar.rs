@@ -75,9 +75,9 @@ impl Default for BarSettings {
                     border_radius: Some(8),
                     font: None,
                     modules: vec![Module::Calendar {
-                        time: true,
+                        show_time: true,
                         format_24_hrs: true,
-                        date: true,
+                        show_date: true,
                         compact: false,
                     }],
                 },
@@ -122,7 +122,11 @@ impl Resolve for BarSettings {
             margin: Insets::default(),
             padding: self.padding,
             section_padding: self.section_padding,
-            sections: self.sections.iter().map(|m| m.resolve()).collect(),
+            sections: self
+                .sections
+                .iter()
+                .map(|s| s.resolve_with_fallback(self.section_padding))
+                .collect(),
             sections_justify: self.sections_justify,
             font: self.font.clone(),
         }
@@ -141,21 +145,15 @@ impl Sanitize for BarSettings {
             MainAxisSize::Auto => {}
         }
 
-        let half_thickness = self.section_cross_axis_size / 2;
-        match self.edge {
-            Edge::Top | Edge::Bottom => {
-                if self.padding.top + self.padding.bottom >= half_thickness {
-                    self.padding.top = 4;
-                    self.padding.bottom = 4;
-                }
-            }
-            Edge::Left | Edge::Right => {
-                if self.padding.left + self.padding.right >= half_thickness {
-                    self.padding.left = 4;
-                    self.padding.right = 4;
-                }
-            }
-        }
+        self.padding.top = self.padding.top.min(64);
+        self.padding.bottom = self.padding.bottom.min(64);
+        self.padding.left = self.padding.left.min(64);
+        self.padding.right = self.padding.right.min(64);
+
+        self.section_padding.top = self.section_padding.top.min(64);
+        self.section_padding.bottom = self.section_padding.bottom.min(64);
+        self.section_padding.left = self.section_padding.left.min(64);
+        self.section_padding.right = self.section_padding.right.min(64);
 
         self.border_radius = self.border_radius.min(self.section_cross_axis_size / 2);
         self.section_border_radius = self

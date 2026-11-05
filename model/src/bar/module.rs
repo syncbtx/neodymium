@@ -55,11 +55,11 @@ pub enum Module {
     #[serde(rename_all = "camelCase")]
     Calendar {
         #[serde(default)]
-        time: bool,
+        show_time: bool,
         #[serde(default)]
         format_24_hrs: bool,
         #[serde(default)]
-        date: bool,
+        show_date: bool,
         #[serde(default)]
         compact: bool,
     },
@@ -98,7 +98,8 @@ mod tests {
             }
         );
 
-        let json_wavy_ring = r#"{"systemModuleCapsule": {"label": true, "module": "ram", "style": "wavyRing"}}"#;
+        let json_wavy_ring =
+            r#"{"systemModuleCapsule": {"label": true, "module": "ram", "style": "wavyRing"}}"#;
         let m: Module = serde_json::from_str(json_wavy_ring).unwrap();
         assert_eq!(
             m,

@@ -40,7 +40,7 @@ pub struct BarSection {
     pub tint: SectionTint,
     pub opacity: Alpha,
     pub spacing: u32,
-    pub padding: Option<Insets<u32>>,
+    pub padding: Insets<u32>,
     pub border: Border,
     pub border_radius: Option<u32>,
     pub font: Option<Font>,

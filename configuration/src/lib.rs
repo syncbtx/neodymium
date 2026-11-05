@@ -1,8 +1,11 @@
+pub mod constants;
 pub mod engine;
 pub mod resolution;
 pub mod resolve;
 pub mod settings;
 pub mod validate;
+
+pub use constants::themes::*;
 
 pub use resolution::{
     NEODYMIUM_ACTIVE_WALLPAPER, NEODYMIUM_CACHE_DIR, NEODYMIUM_CONFIG_DIR,

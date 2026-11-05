@@ -12,5 +12,8 @@
   - allow users to save their settings as presets and load them at anytime with validation
   - theme system, mainly colour
   - scheduled system update
+
+- desktop widgets 
+  - flashcards/notes/todo
   
 -

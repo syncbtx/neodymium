@@ -1,19 +1,10 @@
 use amane::{LayerWindow, Monitor, Service};
 use configuration::{
-    NEODYMIUM_ACTIVE_WALLPAPER, NEODYMIUM_USER_SETTINGS_PATH, SERPANTINUM_WALLPAPER,
-    engine::SettingsEngine, resolve::Resolve, settings::AppSettings,
+    NEODYMIUM_USER_SETTINGS_PATH, engine::SettingsEngine, resolve::Resolve, settings::AppSettings,
 };
-use std::path::Path;
 
-fn resolve_active_wallpaper() -> Option<&'static Path> {
-    if NEODYMIUM_ACTIVE_WALLPAPER.exists() {
-        Some(NEODYMIUM_ACTIVE_WALLPAPER.as_path())
-    } else if SERPANTINUM_WALLPAPER.exists() {
-        Some(SERPANTINUM_WALLPAPER.as_path())
-    } else {
-        None
-    }
-}
+use crate::services::theme::ThemeEngine;
+mod services;
 
 #[derive(Debug)]
 pub struct ShellState {
@@ -24,27 +15,8 @@ impl amane::Service for ShellState {
     fn new() -> Self {
         let _ = SettingsEngine::init();
         let settings = SettingsEngine::load();
-        let wp_path = resolve_active_wallpaper();
 
-        // At startup the UI thread hasn't started yet, so it's safe to do
-        // all the slow work here before touching the write lock.
-        let pre_configured = ui::services::pre_configured_theme(settings.theme.pre_configured);
-        let seed_palette = ui::services::generate_from_seed(&settings.theme.seed_color);
-        let wp_palette = wp_path
-            .filter(|p| p.exists())
-            .and_then(|p| ui::services::generate_from_wallpaper(p, &settings.theme.wallpaper));
-
-        {
-            let mut theme = ui::services::Theme::write();
-            theme.set_meta(&settings.theme);
-            theme.set_pre_configured(pre_configured);
-            if let Some(p) = seed_palette {
-                theme.set_seed_color(p);
-            }
-            if let Some(p) = wp_palette {
-                theme.set_wallpaper(p);
-            }
-        }
+        ThemeEngine::write().update(&settings.theme);
 
         Self { settings }
     }
@@ -56,29 +28,7 @@ impl amane::Service for ShellState {
         for _ in amane::watch_file(&path) {
             match SettingsEngine::reload() {
                 Ok(settings) => {
-                    let wp_path = resolve_active_wallpaper();
-
-                    let pre_configured =
-                        ui::services::pre_configured_theme(settings.theme.pre_configured);
-
-                    let seed_palette = ui::services::generate_from_seed(&settings.theme.seed_color);
-
-                    let wp_palette = wp_path.filter(|p| p.exists()).and_then(|p| {
-                        ui::services::generate_from_wallpaper(p, &settings.theme.wallpaper)
-                    });
-
-                    {
-                        let mut theme = ui::services::Theme::write();
-                        theme.set_meta(&settings.theme);
-                        theme.set_pre_configured(pre_configured);
-                        if let Some(p) = seed_palette {
-                            theme.set_seed_color(p);
-                        }
-                        if let Some(p) = wp_palette {
-                            theme.set_wallpaper(p);
-                        }
-                    }
-
+                    ThemeEngine::write().update(&settings.theme);
                     ShellState::write().settings = settings;
                     println!("reload successful");
                 }

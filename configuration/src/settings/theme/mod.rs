@@ -5,6 +5,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::validate::Sanitize;
 
+mod preconfigured;
+mod seed_color;
+mod wallpaper;
+
+pub use preconfigured::*;
+pub use seed_color::*;
+pub use wallpaper::*;
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum ColorScheme {
@@ -92,106 +100,9 @@ impl ResizeFilter {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(default, deny_unknown_fields, rename_all = "camelCase")]
-pub struct WallpaperTheme {
-    pub index: Option<usize>,
-    pub contrast: f32,
-    pub opacity: Alpha,
-    pub scheme_type: SchemeType,
-    pub prefer: Option<ColorPreference>,
-    pub resize_filter: Option<ResizeFilter>,
-    pub lightness_dark: Option<f32>,
-    pub lightness_light: Option<f32>,
-    pub fallback_color: Option<HexColor>,
-}
-
-pub type WallpaperSettings = WallpaperTheme;
-
-impl Default for WallpaperTheme {
-    fn default() -> Self {
-        Self {
-            index: None,
-            contrast: 0.0,
-            opacity: Alpha::default(),
-            scheme_type: SchemeType::SchemeTonalSpot,
-            prefer: None,
-            resize_filter: None,
-            lightness_dark: None,
-            lightness_light: None,
-            fallback_color: None,
-        }
-    }
-}
-
-impl Sanitize for WallpaperTheme {
-    fn sanitize(&mut self) {
-        if let Some(idx) = &mut self.index {
-            *idx = (*idx).min(4);
-        }
-        self.contrast = self.contrast.clamp(-1.0, 1.0);
-        if let Some(ld) = &mut self.lightness_dark {
-            *ld = ld.min(1.0);
-        }
-        if let Some(ll) = &mut self.lightness_light {
-            *ll = ll.max(-1.0);
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(default, deny_unknown_fields, rename_all = "camelCase")]
-pub struct SeedColorTheme {
-    pub seed_color: HexColor,
-    pub contrast: f32,
-    pub opacity: Alpha,
-    pub scheme_type: SchemeType,
-    pub lightness_dark: Option<f32>,
-    pub lightness_light: Option<f32>,
-}
-
-pub type SeedColorSettings = SeedColorTheme;
-
-impl Default for SeedColorTheme {
-    fn default() -> Self {
-        Self {
-            seed_color: HexColor::rgb(0x41, 0x5f, 0x91),
-            contrast: 0.0,
-            opacity: Alpha::default(),
-            scheme_type: SchemeType::SchemeTonalSpot,
-            lightness_dark: None,
-            lightness_light: None,
-        }
-    }
-}
-
-impl Sanitize for SeedColorTheme {
-    fn sanitize(&mut self) {
-        self.contrast = self.contrast.clamp(-1.0, 1.0);
-        if let Some(ld) = &mut self.lightness_dark {
-            *ld = ld.min(1.0);
-        }
-        if let Some(ll) = &mut self.lightness_light {
-            *ll = ll.max(-1.0);
-        }
-    }
-}
-
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub enum PreConfiguredTheme {
-    #[default]
-    Catppuccin,
-    Gruvbox,
-    Nord,
-    TokyoNight,
-    Solarised,
-    Monokai,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub enum ActiveThemeSource {
+pub enum ThemeSource {
     #[default]
     Wallpaper,
     SeedColor,
@@ -202,20 +113,18 @@ pub enum ActiveThemeSource {
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
 pub struct ThemeSettings {
     pub mode: ColorScheme,
-    pub active: ActiveThemeSource,
+    pub active: ThemeSource,
     pub wallpaper: WallpaperTheme,
     pub seed_color: SeedColorTheme,
     pub pre_configured: PreConfiguredTheme,
 }
 
-pub type ThemeSetting = ThemeSettings;
-
 impl ThemeSettings {
     pub fn active_opacity(&self) -> Alpha {
         match self.active {
-            ActiveThemeSource::Wallpaper => self.wallpaper.opacity,
-            ActiveThemeSource::SeedColor => self.seed_color.opacity,
-            ActiveThemeSource::PreConfigured => Alpha::default(),
+            ThemeSource::Wallpaper => self.wallpaper.opacity,
+            ThemeSource::SeedColor => self.seed_color.opacity,
+            ThemeSource::PreConfigured => Alpha::default(),
         }
     }
 }
@@ -225,4 +134,20 @@ impl Sanitize for ThemeSettings {
         self.wallpaper.sanitize();
         self.seed_color.sanitize();
     }
+}
+
+#[derive(Debug, Copy, Clone, Default, Deserialize)]
+pub struct ColorEntry {
+    color: HexColor,
+}
+
+#[derive(Debug, Copy, Clone, Default, Deserialize)]
+pub struct ModeEntry {
+    dark: ColorEntry,
+    light: ColorEntry,
+}
+
+#[derive(Deserialize)]
+pub struct MatugenOutput {
+    colors: model::Palette<ModeEntry>,
 }

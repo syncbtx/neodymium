@@ -28,10 +28,10 @@ pub fn view(
     let cross_size = parent.section_cross_axis_size as f32;
 
     let padding = Padding {
-        top: section.padding.unwrap().top as f32,
-        right: section.padding.unwrap().right as f32,
-        bottom: section.padding.unwrap().bottom as f32,
-        left: section.padding.unwrap().left as f32,
+        top: section.padding.top as f32,
+        right: section.padding.right as f32,
+        bottom: section.padding.bottom as f32,
+        left: section.padding.left as f32,
     };
 
     let module_thickness = (cross_size - axis.cross_padding(padding)).max(16.0);

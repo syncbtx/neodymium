@@ -1,4 +1,7 @@
-use amane::{Align, Center, Column, Cpu, Media, Memory, Radius, Rectangle, Service, Text, Widget};
+use amane::{
+    Align, Center, Color, Column, Cpu, Media, Memory, Pointer, Rectangle, Row, Service, Text,
+    Widget, Workspaces,
+};
 use hhmmss::Hhmmss;
 use model::{
     Font,
@@ -29,8 +32,60 @@ use crate::{
     axis::{Axis, Flow},
     color::resolve_color,
     component::progress,
-    services::{self, DateParts, TimeParts},
+    services::{self},
 };
+
+use amane::Animation;
+use std::{collections::HashMap, time::Duration};
+
+struct PillColors {
+    bg: Animation<Color>,
+    fg: Animation<Color>,
+}
+
+pub struct PillHover {
+    colors: HashMap<i64, PillColors>,
+    scale: HashMap<i64, Animation<f32>>,
+}
+
+impl Service for PillHover {
+    fn new() -> Self {
+        Self {
+            colors: HashMap::new(),
+            scale: HashMap::new(),
+        }
+    }
+    fn interval() -> Duration {
+        Duration::from_secs(3600)
+    }
+}
+
+impl PillHover {
+    pub fn colors(&self, id: i64) -> Option<(Color, Color)> {
+        self.colors.get(&id).map(|c| (c.bg.value(), c.fg.value()))
+    }
+
+    pub fn scale(&self, id: i64) -> Option<f32> {
+        self.scale.get(&id).map(|s| s.value())
+    }
+
+    pub fn go(&mut self, id: i64, rest: (Color, Color), target: (Color, Color), scale: f32) {
+        let p = self.colors.entry(id).or_insert_with(|| PillColors {
+            bg: Animation::new(rest.0).duration(Duration::from_millis(500)),
+            fg: Animation::new(rest.1).duration(Duration::from_millis(500)),
+        });
+        p.bg.to(target.0);
+        p.fg.to(target.1);
+        self.scale
+            .entry(id)
+            .or_insert_with(|| {
+                Animation::new(1.0)
+                    .duration(Duration::from_millis(500))
+                    .easing(amane::Easing::Out)
+            })
+            .to(scale);
+    }
+}
 
 pub fn view(
     module: Module,
@@ -63,17 +118,36 @@ pub fn view(
             Box::new(Rectangle::new().width(w).height(h).radius(radius)) as Box<dyn Widget>
         }
         Module::Workspaces { .. } => {
-            let workspaces = amane::Workspaces::read();
+            let guard = amane::Workspaces::read();
+
+            let workspaces = guard.list();
 
             let pills = workspaces
-                .list()
                 .iter()
                 .filter(|ws| ws.windows() > 0 || (ws.windows() == 0 && ws.focused()))
                 .map(|ws| {
-                    let (background, foreground) = if ws.active() {
-                        (palette.primary, palette.on_primary)
+                    let hover = PillHover::read();
+
+                    let active = ws.active();
+
+                    let id = ws.id();
+
+                    let rest = (
+                        resolve_color(colors.module_background),
+                        resolve_color(colors.module_foreground),
+                    );
+                    let lit = (
+                        resolve_color(palette.surface_container_highest),
+                        resolve_color(palette.on_surface_variant),
+                    );
+
+                    let (background, foreground) = if active {
+                        (
+                            resolve_color(palette.primary),
+                            resolve_color(palette.on_primary),
+                        )
                     } else {
-                        (colors.module_background, colors.module_foreground)
+                        hover.colors(id).unwrap_or(rest)
                     };
 
                     Box::new(
@@ -81,14 +155,26 @@ pub fn view(
                             .width(thickness)
                             .height(thickness)
                             .radius(radius)
-                            .fill(resolve_color(background))
+                            .fill(background)
                             .align_child(Align::Center, Align::Center)
+                            .cursor(Pointer)
+                            .on_hover(move |inside| {
+                                PillHover::write().go(
+                                    id,
+                                    rest,
+                                    if inside { lit } else { rest },
+                                    if inside { 1.1 } else { 1.0 },
+                                );
+                            })
+                            .on_click(move |_| {
+                                Workspaces::focus(id);
+                            })
                             .child(
                                 Text::new(format!("{}", ws.index()))
                                     .size(font_size)
                                     .font(&font.path_or_name)
                                     .weight(font_weight)
-                                    .color(resolve_color(foreground)),
+                                    .color(foreground),
                             ),
                     ) as Box<dyn Widget>
                 })
@@ -115,56 +201,173 @@ pub fn view(
 
             Box::new(inner) as Box<dyn Widget>
         }
-        Module::Calendar {
-            time,
-            date,
-            format_24_hrs,
-            ..
-        } => {
+        Module::Calendar { format_24_hrs, .. } => {
             let clock = services::Clock::read();
 
-            let mut sections = Vec::new();
+            let time = clock.time();
+            let date = clock.date();
 
-            if time {
-                sections.push(time_section(&clock.time(), !format_24_hrs));
-            }
+            let primary = resolve_color(palette.primary);
+            let secondary = resolve_color(palette.secondary);
+            let surface_low = resolve_color(palette.surface_container_low);
+            let tertiary = resolve_color(palette.tertiary);
 
-            if date {
-                sections.push(date_section(&clock.date()));
-            }
+            let large_font = font_size * 1.25;
+            let small_font = font_size * 0.9;
 
-            if axis.is_horizontal() {
-                let line = sections
-                    .iter()
-                    .map(TimeSection::line)
-                    .collect::<Vec<_>>()
-                    .join("  ");
+            let inner_gap = 2.0f32;
+            let weight = 700;
+
+            let thickness = large_font + inner_gap;
+
+            let sec_and_period = if !format_24_hrs {
+                let period = if time.am { "AM" } else { "PM" };
+
+                let radius = radius / 1.75;
 
                 Box::new(
-                    Text::new(&line.to_uppercase())
-                        .size(font_size)
-                        .weight(font_weight)
-                        .font(&font.path_or_name)
-                        .color(resolve_color(colors.foreground))
-                        .max_lines(1),
+                    Rectangle::new()
+                        .width(thickness)
+                        .height((thickness - inner_gap) / 2.0)
+                        .fill(surface_low)
+                        .radius(radius)
+                        .align_child(Center, Center)
+                        .child(
+                            Text::new(format!("{}", period))
+                                .size(large_font)
+                                .color(primary)
+                                .weight(weight)
+                                .tight(),
+                        ),
                 ) as Box<dyn Widget>
             } else {
-                let rows = sections
-                    .into_iter()
-                    .flat_map(TimeSection::stacked)
-                    .map(|row| {
-                        Box::new(
-                            Text::new(&row.to_uppercase())
-                                .font(&font.path_or_name)
-                                .size(font_size)
-                                .weight(font_weight)
-                                .color(resolve_color(colors.foreground)),
-                        ) as Box<dyn Widget>
-                    })
-                    .collect();
+                Box::new(Column::new(vec![Box::new(
+                    Rectangle::new()
+                        .width(0.0)
+                        .height(0.0)
+                        .fill(surface_low)
+                        .radius(radius), // .align_child(Center, Center)
+                                         // .child(
+                                         //     Text::new(format!("{:02}", time.sec))
+                                         //         .size(large_font)
+                                         //         .color(primary)
+                                         //         .weight(weight)
+                                         //         .tight(),
+                                         // ),
+                ) as Box<dyn Widget>])) as Box<dyn Widget>
+            };
 
-                Box::new(Column::new(rows).align(Center)) as Box<dyn Widget>
-            }
+            let time = Row::new(vec![
+                Box::new(
+                    Rectangle::new()
+                        .width(thickness)
+                        .height(thickness)
+                        .fill(surface_low)
+                        .radius(radius)
+                        .align_child(Center, Center)
+                        .child(
+                            Text::new(format!("{:02}", time.hour))
+                                .size(large_font)
+                                .weight(weight)
+                                .color(primary)
+                                .tight(),
+                        ),
+                ) as Box<dyn Widget>,
+                Box::new(
+                    Rectangle::new()
+                        .width(thickness)
+                        .height(thickness)
+                        .radius(radius)
+                        .fill(surface_low)
+                        .align_child(Center, Center)
+                        .child(
+                            Text::new(format!("{:02}", time.min))
+                                .size(large_font)
+                                .weight(weight)
+                                .color(secondary)
+                                .tight(),
+                        ),
+                ) as Box<dyn Widget>,
+                sec_and_period,
+            ])
+            .align(Center)
+            .justify(Center)
+            .gap(0.0);
+
+            let _date = Row::new(vec![
+                Box::new(
+                    Rectangle::new()
+                        .width(thickness)
+                        .height(thickness)
+                        .fill(surface_low)
+                        .align_child(Center, Center)
+                        .child(
+                            Text::new(format!("{}", WEEKDAYS_SHORT[date.weekday].to_uppercase()))
+                                .size(small_font)
+                                .weight(weight)
+                                .color(primary)
+                                .tight(),
+                        ),
+                ) as Box<dyn Widget>,
+                Box::new(
+                    Rectangle::new()
+                        .width(thickness)
+                        .height(thickness)
+                        .fill(surface_low)
+                        .align_child(Center, Center)
+                        .child(
+                            Text::new(format!("{:02}", date.day))
+                                .size(large_font)
+                                .weight(weight)
+                                .color(secondary)
+                                .tight(),
+                        ),
+                ) as Box<dyn Widget>,
+                Box::new(
+                    Column::new(vec![
+                        Box::new(
+                            Rectangle::new()
+                                .width(thickness)
+                                .height((thickness - inner_gap) / 2.0)
+                                .fill(surface_low)
+                                .align_child(Center, Center)
+                                .child(
+                                    Text::new(format!("{}", MONTHS[date.month].to_uppercase()))
+                                        .size(small_font)
+                                        .color(primary)
+                                        .weight(weight)
+                                        .tight(),
+                                ),
+                        ) as Box<dyn Widget>,
+                        Box::new(
+                            Rectangle::new()
+                                .width(thickness)
+                                .height((thickness - inner_gap) / 2.0)
+                                .fill(surface_low)
+                                .align_child(Center, Center)
+                                .child(
+                                    Text::new(format!("{}", date.year))
+                                        .size(small_font)
+                                        .color(tertiary)
+                                        .weight(weight)
+                                        .tight(),
+                                ),
+                        ) as Box<dyn Widget>,
+                    ])
+                    .gap(2.0),
+                ) as Box<dyn Widget>,
+            ])
+            .align(Center)
+            .justify(Center)
+            .gap(2.0);
+
+            Box::new(
+                Row::new(vec![
+                    Box::new(time) as Box<dyn Widget>,
+                    // Box::new(date) as Box<dyn Widget>,
+                ])
+                .gap(inner_gap),
+            ) as Box<dyn Widget>
         }
 
         Module::Divider => {
@@ -175,24 +378,18 @@ pub fn view(
             Box::new(Rectangle::new().width(w).height(h).fill(fill)) as Box<dyn Widget>
         }
         Module::Ring => {
-            let inner = thickness - 1.5f32;
-            Box::new(
-                Rectangle::new()
-                    .width(thickness)
-                    .height(thickness)
-                    .radius(Radius::Full)
-                    .align_child(Center, Center)
-                    .fill(resolve_color(palette.outline_variant))
-                    .child(
-                        Rectangle::new()
-                            .width(inner)
-                            .height(inner)
-                            .radius(Radius::Full)
-                            .align_child(Center, Center)
-                            .fill(resolve_color(colors.background)),
-                    )
-                    .on_hover(|hovered| if hovered {}),
-            ) as Box<dyn Widget>
+            let colors = [
+                resolve_color(palette.primary),
+                Color::TRANSPARENT,
+                resolve_color(palette.secondary),
+                resolve_color(palette.error),
+            ];
+
+            let thresholds = [0.0, 1.0];
+
+            Box::new(progress::flat_ring(
+                thickness, 1.5, 1.0, -phase, &colors, thresholds,
+            )) as Box<dyn Widget>
         }
         Module::Media => {
             let media = Media::read();
@@ -226,14 +423,14 @@ pub fn view(
             }
         }
         Module::SystemModuleCapsule { module, style, .. } => {
-            let (key, raw_ratio) = match module {
+            let (key, raw_ratio, icon) = match module {
                 model::bar::module::SystemModule::Cpu => {
                     let pct = Cpu::read().percent();
-                    ("cpu", pct as f32 / 100.0)
+                    ("cpu", pct as f32 / 100.0, format!("{}", "\u{f4bc}"))
                 }
                 model::bar::module::SystemModule::Ram => {
                     let pct = Memory::read().percent();
-                    ("ram", pct as f32 / 100.0)
+                    ("ram", pct as f32 / 100.0, format!("{}", "\u{efc5}"))
                 }
                 model::bar::module::SystemModule::Disk => todo!(),
                 model::bar::module::SystemModule::Temp => todo!(),
@@ -259,83 +456,37 @@ pub fn view(
 
             let rect = match style {
                 SystemModuleStyle::Ring => {
-                    progress::flat_ring(thickness, 2.0, ratio, phase, &colors, thresholds)
+                    progress::flat_ring(thickness, 1.5, ratio, phase, &colors, thresholds)
+                        .align_child(Center, Center)
+                        .child(
+                            Text::new(icon)
+                                .color(resolve_color(palette.on_surface_variant))
+                                .size(10.0)
+                                .tight(),
+                        )
                 }
                 SystemModuleStyle::WaveyRing => {
-                    progress::wavy_ring(thickness, 2.0, ratio, phase, &colors, thresholds)
+                    progress::wavy_ring(thickness, 1.5, ratio, phase, &colors, thresholds)
+                        .align_child(Center, Center)
+                        .child(
+                            Text::new(icon)
+                                .color(resolve_color(palette.on_surface_variant))
+                                .size(10.0)
+                                .tight(),
+                        )
                 }
                 SystemModuleStyle::Bar => {
-                    progress::flat_bar(thickness, 2.0, ratio, phase, &colors, thresholds)
+                    progress::flat_bar(thickness, 1.5, ratio, phase, &colors, thresholds)
                 }
                 SystemModuleStyle::WaveyBar => {
-                    progress::wavy_bar(thickness, 2.0, ratio, phase, &colors, thresholds)
+                    progress::wavy_bar(thickness, 1.5, ratio, phase, &colors, thresholds)
                 }
                 SystemModuleStyle::Graph => {
-                    progress::wavy_bar(thickness, 2.0, ratio, phase, &colors, thresholds)
+                    progress::wavy_bar(thickness, 1.5, ratio, phase, &colors, thresholds)
                 }
             };
 
             Box::new(rect) as Box<dyn Widget>
         }
-    }
-}
-
-struct TimeSection {
-    fields: Vec<String>,
-    sep: &'static str,
-    suffix: Option<&'static str>,
-}
-
-impl TimeSection {
-    fn line(&self) -> String {
-        let mut line = self.fields.join(self.sep);
-
-        if let Some(suffix) = self.suffix {
-            line.push(' ');
-            line.push_str(suffix);
-        }
-
-        line
-    }
-
-    fn stacked(self) -> Vec<String> {
-        let mut rows = self.fields;
-        rows.extend(self.suffix.map(String::from));
-        rows
-    }
-}
-
-fn time_section(time: &TimeParts, twelve_hour: bool) -> TimeSection {
-    let (hour, suffix) = if twelve_hour {
-        let hour = match time.hour % 12 {
-            0 => 12,
-            hour => hour,
-        };
-
-        (
-            format!("{:02}", hour),
-            Some(if time.am { "AM" } else { "PM" }),
-        )
-    } else {
-        (format!("{:02}", time.hour), None)
-    };
-
-    TimeSection {
-        fields: vec![hour, format!("{:02}", time.min), format!("{:02}", time.sec)],
-        sep: ":",
-        suffix,
-    }
-}
-
-fn date_section(date: &DateParts) -> TimeSection {
-    TimeSection {
-        fields: vec![
-            WEEKDAYS_SHORT[date.weekday].to_string(),
-            date.day.to_string(),
-            MONTHS[date.month].to_string(),
-            date.year.to_string(),
-        ],
-        sep: " ",
-        suffix: None,
     }
 }

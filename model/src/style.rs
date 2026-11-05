@@ -124,8 +124,7 @@ pub enum Backdrop {
         radius: u32,
     },
     Waveform {
-        color: HexColor,
-        opacity: Alpha,
+        opacity: u8,
     },
     Shader {
         name_or_path: String,

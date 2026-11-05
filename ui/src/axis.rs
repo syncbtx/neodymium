@@ -46,11 +46,17 @@ impl Axis {
         }
     }
 
-    pub fn point<T>(&self, main: T, cross: T) -> (T, T) {
+    /// Reorders (main, cross) into (horizontal, vertical).
+    /// Used for alignment pairs and coordinate points.
+    pub fn to_hv<T>(&self, main: T, cross: T) -> (T, T) {
         match self {
             Self::Horizontal => (main, cross),
             Self::Vertical => (cross, main),
         }
+    }
+
+    pub fn point<T>(&self, main: T, cross: T) -> (T, T) {
+        self.to_hv(main, cross)
     }
 
     pub fn monitor_main(&self, monitor: &Monitor) -> f32 {
