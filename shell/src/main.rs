@@ -1,94 +1,77 @@
-use std::{ffi::OsStr, os::unix::process::CommandExt, process::Command, time::Duration};
+use amane::{LayerWindow, Monitor, Service};
+use configuration::{
+    NEODYMIUM_USER_SETTINGS_PATH, engine::SettingsEngine, resolve::Resolve, settings::AppSettings,
+};
 
-use amane::App;
-use configuration::engine::ConfigEngine;
-use inotify::{Inotify, WatchMask};
-use model::bar::Bars;
+use crate::services::theme::ThemeEngine;
+mod services;
+
+#[derive(Debug)]
+pub struct ShellState {
+    pub settings: AppSettings,
+}
+
+impl amane::Service for ShellState {
+    fn new() -> Self {
+        let _ = SettingsEngine::init();
+        let settings = SettingsEngine::load();
+
+        ThemeEngine::write().update(&settings.theme);
+
+        Self { settings }
+    }
+
+    fn listen() {
+        let path = NEODYMIUM_USER_SETTINGS_PATH.to_string_lossy().to_string();
+        eprintln!("watching {path}");
+
+        for _ in amane::watch_file(&path) {
+            match SettingsEngine::reload() {
+                Ok(settings) => {
+                    ThemeEngine::write().update(&settings.theme);
+                    ShellState::write().settings = settings;
+                    println!("reload successful");
+                }
+                Err(e) => eprintln!("reload failed: {e}"),
+            }
+        }
+    }
+}
+
+fn top(monitor: &Monitor) -> LayerWindow {
+    ui::bar::view(&ShellState::read().settings.bars.top.resolve(), monitor)
+}
+
+fn right(monitor: &Monitor) -> LayerWindow {
+    ui::bar::view(&ShellState::read().settings.bars.right.resolve(), monitor)
+}
+
+fn bottom(monitor: &Monitor) -> LayerWindow {
+    ui::bar::view(&ShellState::read().settings.bars.bottom.resolve(), monitor)
+}
+
+fn left(monitor: &Monitor) -> LayerWindow {
+    ui::bar::view(&ShellState::read().settings.bars.left.resolve(), monitor)
+}
 
 fn main() -> Result<(), String> {
-    let engine = ConfigEngine::init()?;
-    let bars = Bars::from_config(&engine.core_config.bars);
-    let general = &engine.core_config.general;
+    let _ = SettingsEngine::init();
 
-    // Must happen BEFORE the watcher starts: it writes into the watched
-    // directory and would otherwise trigger a reload loop.
-    if let Err(e) = ConfigEngine::export_schemas() {
-        eprintln!("failed to export schemas: {e}");
-    }
+    let (font, scc, factor) = {
+        let state = ShellState::read();
+        let font = state.settings.general.font.path_or_name.clone();
+        let scc = state.settings.bars.resolve().screen_corner_claimer;
+        let factor = state.settings.general.scale.clamp(0.4, 2.0);
+        (font, scc, factor)
+    };
 
-    ui::bar::init(bars);
-    let views = ui::bar::views();
+    let mut app = amane::App::new().font(&font).scale_factor(factor);
 
-    if views.is_empty() {
-        eprintln!("No bars enabled in configuration.");
-        return Ok(());
-    }
-
-    let mut app = App::new().font(&general.font.path_or_name);
-    for view in views {
+    for view in ui::bars::ordered(top, right, bottom, left, scc) {
         app = app.window_per_monitor(view);
     }
 
-    spawn_config_watcher();
-
     app.run();
+
     Ok(())
-}
-
-/// Only real JSON config files trigger a reload. Generated schemas,
-/// dotfiles, and editor temp/swap files are ignored.
-fn is_config_file(name: &OsStr) -> bool {
-    let Some(name) = name.to_str() else {
-        return false;
-    };
-    name.ends_with(".json") && !name.ends_with(".schema.json") && !name.starts_with('.')
-}
-
-fn spawn_config_watcher() {
-    std::thread::spawn(|| {
-        if let Err(e) = watch_loop() {
-            eprintln!("config watcher stopped: {e}");
-        }
-    });
-}
-
-fn watch_loop() -> std::io::Result<()> {
-    let mut ino = Inotify::init()?;
-    ino.watches().add(
-        configuration::resolution::preferences_dir(),
-        // Editors usually write a temp file and rename it over the target,
-        // which shows up as MOVED_TO/CREATE rather than MODIFY.
-        WatchMask::CLOSE_WRITE | WatchMask::MOVED_TO | WatchMask::CREATE,
-    )?;
-
-    let mut buf = [0u8; 4096];
-    loop {
-        let hit = ino
-            .read_events_blocking(&mut buf)?
-            .any(|e| e.name.map_or(false, is_config_file));
-        if !hit {
-            continue;
-        }
-
-        // Debounce: one save often fires several events.
-        std::thread::sleep(Duration::from_millis(75));
-
-        // Validate first. A typo keeps the running shell alive.
-        match ConfigEngine::init() {
-            Ok(_) => restart(),
-            Err(e) => eprintln!("config reload failed, keeping current config: {e}"),
-        }
-    }
-}
-
-/// Replace the current process with a fresh copy of itself.
-/// On success this never returns.
-fn restart() {
-    match std::env::current_exe() {
-        Ok(exe) => {
-            let err = Command::new(exe).args(std::env::args_os().skip(1)).exec();
-            eprintln!("restart failed: {err}");
-        }
-        Err(e) => eprintln!("cannot locate own executable: {e}"),
-    }
 }

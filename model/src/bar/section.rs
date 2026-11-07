@@ -1,37 +1,49 @@
-use configuration::{domain::bars::SectionConfig, shared::Border};
 use hex_color::HexColor;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 
-use crate::bar::module::BarModule;
+use crate::{Alpha, Border, Font, Insets, bar::module::Module};
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum SectionTint {
+    #[default]
+    Surface,
+    Primary,
+    Secondary,
+    Tertiary,
+    Error,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields, rename_all = "camelCase")]
+pub struct BarSectionColors {
+    pub background: HexColor,
+    pub foreground: HexColor,
+    pub module_background: HexColor,
+    pub module_foreground: HexColor,
+}
+
+impl Default for BarSectionColors {
+    fn default() -> Self {
+        Self {
+            background: HexColor::rgba(255, 131, 131, 1),
+            foreground: HexColor::rgba(25, 36, 31, 1),
+            module_background: HexColor::rgba(25, 36, 31, 1),
+            module_foreground: HexColor::rgba(192, 193, 194, 1),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct BarSection {
-    pub background: Option<HexColor>,
-    pub foreground: Option<HexColor>,
-    pub opacity: u32,
+    pub tint: SectionTint,
+    pub opacity: Alpha,
     pub spacing: u32,
-    pub major_axis_padding: u32,
-    pub minor_axis_padding: u32,
+    pub padding: Insets<u32>,
     pub border: Border,
     pub border_radius: Option<u32>,
-    pub modules: Vec<BarModule>,
-}
-
-impl BarSection {
-    pub fn from_config(config: &SectionConfig) -> Self {
-        let mut modules = Vec::new();
-        for cfg in config.modules.iter() {
-            modules.push(BarModule::from_config(&cfg));
-        }
-        Self {
-            background: config.background,
-            foreground: config.foreground,
-            opacity: config.opacity,
-            spacing: config.spacing,
-            major_axis_padding: config.major_axis_padding,
-            minor_axis_padding: config.minor_axis_padding,
-            border: config.border,
-            border_radius: config.border_radius,
-            modules,
-        }
-    }
+    pub module_border_radius: Option<u32>,
+    pub font: Option<Font>,
+    pub modules: Vec<Module>,
 }

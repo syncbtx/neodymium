@@ -1,4 +1,12 @@
+pub mod axis;
+pub mod backdrop;
 pub mod bar;
-mod color;
+pub mod bars;
+pub mod color;
+pub mod component;
+pub mod constants;
+pub mod envelope;
 pub mod module;
 pub mod section;
+pub mod service;
+pub use axis::*;

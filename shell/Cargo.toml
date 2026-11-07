@@ -1,12 +1,17 @@
 [package]
-name = "shell"
+name = "neodymium"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-colored = "3.1.1"
-configuration = {path = "../configuration"}
-model = {path = "../model"}
-ui = {path = "../ui"}
-amane = {git = "https://github.com/MystiaFin/amane.git", tag = "0.1.1"}
-inotify = {version = "0.11.5"}
+configuration = { path = "../configuration" }
+model = { path = "../model" }
+ui = { path = "../ui" }
+amane = { git = "https://github.com/MystiaFin/amane.git", tag = "v.0.1.2-experimental" }
+
+# [profile.release]
+# opt-level = 3
+# lto = "fat"
+# codegen-units = 8
+# strip = "symbols"
+# debug = false
