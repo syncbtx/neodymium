@@ -1,7 +1,7 @@
 use amane::{Align, Column, Fill, Justify, Monitor, Padding, Rectangle, Row, Size, Widget};
 use model::Edge;
 
-use crate::card;
+use crate::envelope;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Axis {
@@ -14,6 +14,13 @@ impl Axis {
         match edge {
             Edge::Top | Edge::Bottom => Self::Horizontal,
             Edge::Left | Edge::Right => Self::Vertical,
+        }
+    }
+
+    pub fn flip(&self) -> Self {
+        match self {
+            Axis::Horizontal => Axis::Vertical,
+            Axis::Vertical => Axis::Horizontal,
         }
     }
 
@@ -140,15 +147,15 @@ impl Flow {
         }
     }
 
-    pub fn into_card(
+    pub fn into_envelope(
         self,
         padding: Padding,
         radius: f32,
         background: Option<impl Into<Fill>>,
     ) -> Rectangle {
         match self {
-            Self::Row(r) => card::view(r, padding, radius, background),
-            Self::Column(c) => card::view(c, padding, radius, background),
+            Self::Row(r) => envelope::view(r, padding, radius, background),
+            Self::Column(c) => envelope::view(c, padding, radius, background),
         }
     }
 

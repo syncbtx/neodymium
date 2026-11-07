@@ -7,11 +7,13 @@
 //   [0] wave color,  straight RGBA
 //   [1] track color, straight RGBA (faint baseline; alpha 0 to disable)
 //   [2] (thickness, max_amplitude, min_wavelength, max_wavelength)   all px
-//   [3] (seed, drift_speed, phase, 0)
+//   [3] (seed, drift_speed, phase, vertical)
 //       seed:         any float, different per instance
 //       drift_speed:  how fast amp/wavelength mix evolves (~0.1..0.5 is calm)
 //       phase:        radians, injected by the caller (share it with the other
 //                     components so every wave travels in lockstep)
+//       vertical:     0 = wave runs along x (horizontal bar),
+//                     1 = wave runs along y (vertical bar)
 //
 // How it avoids the "sliding" problem of changing freq directly:
 // the wave is a fixed set of three sines (long / mid / short wavelength).
@@ -42,7 +44,17 @@ fn main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
     let color = values[0];
     let track = values[1];
     let hw = values[2].x * 0.5;
-    let mid = size.y * 0.5;
+
+    let vertical = values[3].w > 0.5;
+
+    let px = uv * size;
+
+    // `along` runs down the length of the wave, `across` is the axis it
+    // oscillates on. Everything below is written in these terms, so the same
+    // math serves both orientations.
+    let along = select(px.x, px.y, vertical);
+    let across = select(px.y, px.x, vertical);
+    let mid = select(size.y, size.x, vertical) * 0.5;
 
     // keep the wave inside the rect
     let amp_max = min(values[2].y, max(mid - hw - 1.0, 0.0));
@@ -75,24 +87,22 @@ fn main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
     var w = vec3<f32>(n0 * n0, n1 * n1, n2 * n2) + vec3<f32>(0.02);
     w = w / (w.x + w.y + w.z);
 
-    let px = uv * size;
-
     // all component phases derive from the injected phase; fixed ratios keep
     // the pattern from simply translating, and seed offsets decorrelate instances
     let ph0 = phase * 1.0 + seed;
     let ph1 = phase * 1.3 + seed * 2.0;
     let ph2 = phase * 0.7 + seed * 3.0;
 
-    let a0 = k0 * px.x + ph0;
-    let a1 = k1 * px.x + ph1;
-    let a2 = k2 * px.x + ph2;
+    let a0 = k0 * along + ph0;
+    let a1 = k1 * along + ph1;
+    let a2 = k2 * along + ph2;
 
     let y = mid + amp * (w.x * sin(a0) + w.y * sin(a1) + w.z * sin(a2));
     let dy = amp * (w.x * k0 * cos(a0) + w.y * k1 * cos(a1) + w.z * k2 * cos(a2));
 
     // first-order distance to the curve
-    let wave_d = abs(px.y - y) / sqrt(1.0 + dy * dy) - hw;
-    let track_d = abs(px.y - mid) - hw * 0.5;
+    let wave_d = abs(across - y) / sqrt(1.0 + dy * dy) - hw;
+    let track_d = abs(across - mid) - hw * 0.5;
 
     let wa = cover(wave_d) * color.a;
     let ta = cover(track_d) * track.a;

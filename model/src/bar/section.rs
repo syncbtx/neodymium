@@ -43,6 +43,7 @@ pub struct BarSection {
     pub padding: Insets<u32>,
     pub border: Border,
     pub border_radius: Option<u32>,
+    pub module_border_radius: Option<u32>,
     pub font: Option<Font>,
     pub modules: Vec<Module>,
 }

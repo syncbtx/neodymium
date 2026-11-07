@@ -7,7 +7,7 @@ use model::{AttachmentMode, MainAxisSize, bar::Bar};
 use crate::{
     axis::{Axis, Flow},
     backdrop, section,
-    services::{self, Theme},
+    service::{self, Theme},
 };
 
 fn resolve_layer(layer: model::Layer) -> amane::Layer {
@@ -143,9 +143,6 @@ fn trim_inner_padding(edge: model::Edge, padding: Padding) -> Padding {
 
 pub fn view(bar: &Bar, monitor: &Monitor) -> LayerWindow {
     let axis = Axis::of(bar.edge);
-    // Exclusive-zone surfaces must be pinned to their edge. bar.anchor only controls
-    // the content alignment within the envelope — the Wayland anchor is always the edge.
-    // Floating bars have no zone and can use the user-chosen anchor for physical placement.
     let (vertical, horizontal) = if bar.exclusive_zone {
         match bar.edge {
             model::Edge::Top => (Vertical::Top, Horizontal::Middle),
@@ -156,13 +153,16 @@ pub fn view(bar: &Bar, monitor: &Monitor) -> LayerWindow {
     } else {
         resolve_anchors(bar)
     };
-    let is_attached = matches!(bar.attachment_mode, AttachmentMode::Attached { .. });
 
     let theme = Theme::read();
 
     let opacity = theme.opacity();
 
     let palette = theme.active();
+
+    let phase = service::motion::phase();
+
+    let is_attached = matches!(bar.attachment_mode, AttachmentMode::Attached { .. });
 
     let bar_fill = if bar.islands {
         Color::TRANSPARENT
@@ -171,12 +171,10 @@ pub fn view(bar: &Bar, monitor: &Monitor) -> LayerWindow {
         crate::color::resolve_color_with_alpha(palette.surface, eff)
     };
 
-    let phase = services::motion::phase();
-
     let sections = bar
         .sections
         .iter()
-        .map(|sec| section::view(sec, bar, palette, phase, opacity))
+        .map(|sec| section::view(monitor, sec, bar, palette, phase, opacity))
         .collect();
 
     let zone = if bar.exclusive_zone {
@@ -185,6 +183,7 @@ pub fn view(bar: &Bar, monitor: &Monitor) -> LayerWindow {
         amane::Zone::default()
     };
 
+    // 'margins' to sidestep the wierd implementation of wayland margins
     let insets = resolve_bounding_insets(bar.attachment_mode, bar.edge);
     let justify = resolve_justify(bar.sections_justify);
 
@@ -244,6 +243,7 @@ pub fn view(bar: &Bar, monitor: &Monitor) -> LayerWindow {
     };
 
     let spanning = bar.exclusive_zone && bar_main_px.is_some();
+
     let window_main_axis = if spanning {
         WindowSize::Full
     } else {
@@ -262,13 +262,16 @@ pub fn view(bar: &Bar, monitor: &Monitor) -> LayerWindow {
     };
 
     let (bar_w, bar_h) = axis.size(bar_main_axis, Size::Fixed(bar_cross));
+
     let bar_rect = Rectangle::new()
         .width(bar_w)
         .height(bar_h)
         .padding(bar_padding)
         .align_child(Align::Center, Align::Center)
         .fill(bar_fill)
+        .blur(if bar.islands { 0.0 } else { bar.blur as f32 })
         .radius(bar.border_radius as f32);
+
     let bar_rect = container.attach_to(bar_rect);
 
     let backdrop = bar.backdrop.clone();
@@ -322,10 +325,20 @@ pub fn view(bar: &Bar, monitor: &Monitor) -> LayerWindow {
     };
 
     if backdrop != model::Backdrop::None {
-        let main = match bar_main_px {
-            Some(px) => px - bar_padding_main,
-            None => monitor_main - bar_padding_main,
-        };
+        let backdrop_bar = Rectangle::new()
+            .width(bar_w)
+            .height(bar_h)
+            .padding(bar_padding)
+            .align_child(Align::Center, Align::Center)
+            .fill(Color::TRANSPARENT)
+            .child(backdrop::view(
+                axis,
+                backdrop,
+                bar.section_cross_axis_size as f32,
+                palette,
+                phase,
+            ));
+
         let backdrop_rect = Rectangle::new()
             .width(env_w)
             .height(env_h)
@@ -337,13 +350,7 @@ pub fn view(bar: &Bar, monitor: &Monitor) -> LayerWindow {
             })
             .align_child(env_align_h, env_align_v)
             .fill(Color::TRANSPARENT)
-            .child(backdrop::view(
-                backdrop,
-                main,
-                bar.section_cross_axis_size as f32,
-                palette,
-                phase,
-            ));
+            .child(backdrop_bar);
 
         window.child(Stack::new(vec![
             Box::new(backdrop_rect) as Box<dyn Widget>,

@@ -50,7 +50,7 @@ fn ring(px: vec2<f32>, u: P) -> vec2<f32> {
     if (sweep > 0.01) {
         let th = (atan2(p.x, -p.y) + TAU) % TAU;
 
-        let waves = TAU * radius / u.freq;
+        let waves = select(0.0, TAU * radius / u.freq, u.freq > 0.0);
 
         let sc = vec2<f32>(sin(waves * th + u.phase), cos(waves * th + u.phase));
         let rho = radius + u.amplitude * sc.x;
@@ -87,7 +87,7 @@ fn bar(px: vec2<f32>, u: P) -> vec2<f32> {
     var fill_d = FAR;
 
     if (xe - x0 > 0.01) {
-        let k = TAU / u.freq;
+        let k = select(0.0, TAU / u.freq, u.freq > 0.0);
         let arg = k * (px.x - x0) + u.phase;
         let y = mid + u.amplitude * sin(arg);
         let dy = u.amplitude * k * cos(arg);

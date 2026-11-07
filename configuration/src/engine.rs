@@ -1,7 +1,7 @@
-use std::collections::BTreeSet;
-use fontconfig::{Fontconfig, ObjectSet, Pattern, list_fonts, FC_FAMILY};
+use fontconfig::{FC_FAMILY, Fontconfig, ObjectSet, Pattern, list_fonts};
 use schemars::schema_for;
 use serde_json::{Map, Value};
+use std::collections::BTreeSet;
 
 use crate::{
     NEODYMIUM_CACHE_DIR, NEODYMIUM_CONFIG_DIR, NEODYMIUM_DEFAULT_SETTINGS_PATH,
@@ -62,6 +62,20 @@ impl SettingsEngine {
         let fonts = Self::list_system_fonts();
         if !fonts.is_empty() {
             if let Some(font_prop) = schema.pointer_mut("/$defs/Font/properties/pathOrName") {
+                *font_prop = serde_json::json!({
+                    "anyOf": [
+                        {
+                            "type": "string",
+                            "enum": fonts
+                        },
+                        {
+                            "type": "string",
+                            "pattern": r"^(/|~|\./|sans-serif|monospace|serif).*"
+                        }
+                    ]
+                });
+            }
+            if let Some(font_prop) = schema.pointer_mut("/$defs/Font/properties/iconP2a3thOrName") {
                 *font_prop = serde_json::json!({
                     "anyOf": [
                         {
@@ -224,4 +238,3 @@ mod tests {
         );
     }
 }
-

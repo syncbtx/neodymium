@@ -14,13 +14,16 @@
 - **Open:** the gap value must live in the model and be passed into `view()`.
 
 
-### 3. Progress does not respond to changes in ratio
-- values like amplitude and freq tied to the current value remain constant
+### 3. CPU Budget 
+- currently overshooting(2-8%) due to what I suspect being heavy shaders, probing defered
 
-### 4. The Axis and Flow refactor degraded the layout fidelity
-- some functionality that was working before fails 
-- examples: the anchor doesn't respond 
-- the bar padding doesn't align in attached mode with bracket bars: it appears to be 4px always regardless of what the settings say. the inner triming works and the niri gap is 8px yet they don't align like they did before
 ## Resolved
+- ### Progress does not respond to changes in ratio
+  - values like amplitude and freq tied to the current value remain constant
+
+- ### The Axis and Flow refactor degraded the layout fidelity
+  - some functionality that was working before fails 
+  - examples: the anchor doesn't respond 
+  - the bar padding doesn't align in attached mode with bracket bars: it appears to be 4px always regardless of what the settings say. the inner triming works and the niri gap is 8px yet they don't align like they did before
 
 - **Floating "stopped applying" after the `bar_padding` refactor:** the attachment mode hadn't been toggled. The envelope and insets were fine.

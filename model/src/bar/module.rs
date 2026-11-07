@@ -32,6 +32,33 @@ pub enum SystemModuleStyle {
     #[serde(alias = "wavyBar", alias = "wavy_bar", alias = "wavey_bar")]
     WaveyBar,
     Graph,
+    Text,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum WorkspacePillStyle {
+    Circle,
+    #[default]
+    Square,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum LinkedPanel {
+    #[default]
+    None,
+    PowerMenu,
+    Launcher,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum ModelIcon {
+    #[default]
+    Distro,
+    Compositor,
+    Shell,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -41,6 +68,10 @@ pub enum Module {
         main_axis_size: u32,
     },
     Spacer(u32),
+    Icon {
+        icon: ModelIcon,
+        linked_panel: LinkedPanel,
+    },
     #[serde(rename_all = "camelCase")]
     Workspaces {
         #[serde(
@@ -50,6 +81,7 @@ pub enum Module {
             alias = "collapse_unused"
         )]
         collapse_unused: bool,
+        style: WorkspacePillStyle,
     },
     FocusedWindowIcon,
     #[serde(rename_all = "camelCase")]
@@ -71,6 +103,7 @@ pub enum Module {
         style: SystemModuleStyle,
     },
     Media,
+    Bluetooth,
     Divider,
     Ring,
 }

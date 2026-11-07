@@ -135,7 +135,7 @@ impl ThemeEngine {
     }
 
     pub fn sync_ui(&self) {
-        let mut ui_theme = ui::services::Theme::write();
+        let mut ui_theme = ui::service::Theme::write();
         ui_theme.palette = self.active_palette();
         ui_theme.opacity = self.opacity;
     }

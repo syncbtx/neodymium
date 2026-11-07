@@ -8,7 +8,6 @@ use model::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-
 #[derive(Debug, Serialize, Clone, Default, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
 pub struct SectionSettings {
@@ -18,6 +17,7 @@ pub struct SectionSettings {
     pub padding: Option<Insets<u32>>,
     pub border: Border,
     pub border_radius: Option<u32>,
+    pub module_border_radius: Option<u32>,
     pub font: Option<Font>,
     pub modules: Vec<Module>,
 }
@@ -31,6 +31,7 @@ impl SectionSettings {
             padding: self.padding.unwrap_or(fallback_padding),
             border: self.border,
             border_radius: self.border_radius,
+            module_border_radius: self.module_border_radius,
             font: self.font.clone(),
             modules: self.modules.clone(),
         }

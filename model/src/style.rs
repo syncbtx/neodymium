@@ -46,6 +46,7 @@ pub enum FontStyle {
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
 pub struct Font {
     pub path_or_name: String,
+    pub icon_path_or_name: String,
     pub weight: FontWeight,
     pub style: FontStyle,
 }
@@ -54,6 +55,7 @@ impl Default for Font {
     fn default() -> Self {
         Self {
             path_or_name: "sans-serif".to_owned(),
+            icon_path_or_name: "Iosevka Nerd Font".to_owned(),
             weight: FontWeight::default(),
             style: FontStyle::default(),
         }
@@ -125,6 +127,7 @@ pub enum Backdrop {
     },
     Waveform {
         opacity: u8,
+        drift_speed: f32,
     },
     Shader {
         name_or_path: String,

@@ -1,7 +1,11 @@
 use model::{
     Alpha, Anchor, AttachmentMode, Backdrop, Border, Edge, Font, Insets, Justify, Layer,
     MainAxisSize,
-    bar::{Bar, module::Module, section::SectionTint},
+    bar::{
+        Bar,
+        module::{Module, WorkspacePillStyle},
+        section::SectionTint,
+    },
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -23,6 +27,7 @@ pub struct BarSettings {
     pub border_radius: u32,
     pub backdrop: Backdrop,
     pub opacity: Alpha,
+    pub blur: u32,
     pub main_axis_size: MainAxisSize,
     pub padding: Insets<u32>,
     pub font: Option<Font>,
@@ -49,6 +54,7 @@ impl Default for BarSettings {
             section_border_radius: 8,
             backdrop: Backdrop::default(),
             opacity: Alpha::default(),
+            blur: 0,
             main_axis_size: MainAxisSize::Percent(80),
             section_cross_axis_size: 24,
             padding: Insets::all(8),
@@ -61,9 +67,12 @@ impl Default for BarSettings {
                     padding: Some(Insets::all(8)),
                     border: Border::None,
                     border_radius: Some(8),
+                    module_border_radius: Some(4),
+
                     font: None,
                     modules: vec![Module::Workspaces {
                         collapse_unused: true,
+                        style: WorkspacePillStyle::Square,
                     }],
                 },
                 SectionSettings {
@@ -73,6 +82,8 @@ impl Default for BarSettings {
                     padding: Some(Insets::all(8)),
                     border: Border::None,
                     border_radius: Some(8),
+                    module_border_radius: Some(4),
+
                     font: None,
                     modules: vec![Module::Calendar {
                         show_time: true,
@@ -88,6 +99,7 @@ impl Default for BarSettings {
                     padding: Some(Insets::all(8)),
                     border: Border::None,
                     border_radius: Some(8),
+                    module_border_radius: Some(4),
                     font: None,
                     modules: vec![Module::FocusedWindowIcon],
                 },
@@ -117,6 +129,7 @@ impl Resolve for BarSettings {
             section_border_radius: self.section_border_radius,
             backdrop: self.backdrop.clone(),
             opacity: self.opacity,
+            blur: self.blur,
             main_axis_size: self.main_axis_size,
             section_cross_axis_size: self.section_cross_axis_size,
             margin: Insets::default(),

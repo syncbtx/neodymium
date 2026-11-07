@@ -16,6 +16,7 @@ impl From<model::bar::module::SystemModuleStyle> for ProgressMode {
             model::bar::module::SystemModuleStyle::Bar => ProgressMode::Bar,
             model::bar::module::SystemModuleStyle::WaveyBar => ProgressMode::WaveyBar,
             model::bar::module::SystemModuleStyle::Graph => ProgressMode::WaveyBar,
+            model::bar::module::SystemModuleStyle::Text => ProgressMode::Bar,
         }
     }
 }
@@ -45,9 +46,17 @@ pub fn color_to_vec4(c: Color) -> [f32; 4] {
 pub fn progress(style: &Style, current: f32, phase: f32) -> Rectangle {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/shaders/progress.wgsl");
 
-    let amplitude = (current * 0.9).max(0.9);
+    let amplitude = if style.amplitude == 0.0 {
+        0.0
+    } else {
+        (current * 0.9).clamp(0.8, 0.9)
+    };
 
-    let freq = 4.5 * 1.0 / current.min(0.5);
+    let freq = if style.freq == 0.0 {
+        0.0
+    } else {
+        10.0 - 4.0 * current
+    };
 
     let mode = match style.mode {
         ProgressMode::Ring | ProgressMode::WaveyRing => 0.0,
@@ -126,6 +135,7 @@ pub fn wavy_bar(
     thresholds: [f32; 2],
 ) -> Rectangle {
     let amplitude = (current * 1.35).max(1.0);
+    // let amplitude = (current * 1.35).max(0.8);
 
     let freq = 8.0 * 1.0 / current.max(0.75);
 

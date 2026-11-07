@@ -1,4 +1,4 @@
-use amane::{Align, Justify, Padding, Size, Widget};
+use amane::{Align, Justify, Monitor, Padding, Size, Widget};
 use model::{
     bar::{
         Bar,
@@ -9,10 +9,12 @@ use model::{
 
 use crate::{
     axis::{Axis, Flow},
-    color, module,
+    color,
+    module::{self, ModuleViewArgs},
 };
 
 pub fn view(
+    monitor: &Monitor,
     section: &BarSection,
     parent: &Bar,
     palette: &Palette,
@@ -81,18 +83,21 @@ pub fn view(
         .modules
         .iter()
         .map(|m| {
-            module::view(
+            let args = ModuleViewArgs::new(
+                monitor,
                 *m,
-                module_thickness,
                 axis,
-                section.border_radius.unwrap_or_default() as f32,
+                module_thickness,
+                palette,
                 &resolved_colors,
                 &font,
-                9.0,
-                700,
-                phase,
-                palette,
             )
+            .radius(section.module_border_radius.unwrap_or_default() as f32)
+            .font_size(9.5)
+            .font_weight(700)
+            .phase(phase);
+
+            module::view(args)
         })
         .collect();
 
@@ -113,6 +118,6 @@ pub fn view(
             .align(Align::Center)
             .justify(Justify::Center)
             .cross_size(inner_cross)
-            .into_card(padding, radius, Some(card_color)),
+            .into_envelope(padding, radius, Some(card_color)),
     )
 }
